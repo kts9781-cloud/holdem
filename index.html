@@ -117,10 +117,16 @@ button:disabled{cursor:not-allowed}
 .btn.primary:not(:disabled):hover{background:linear-gradient(180deg, #ebc982, #c49a4e)}
 .btn.ghost{background:transparent; color:var(--muted)}
 .btn:disabled{opacity:.36}
-.sizing{display:flex; align-items:center; gap:6px}
-.chip{min-height:36px; padding:0 12px; border-radius:999px; border:1px solid var(--brass-dim); background:transparent; color:var(--muted); font-size:13px}
+.sizing{display:grid; gap:8px}
+.presets{display:flex; gap:6px}
+.presets .chip{flex:1; min-width:0; padding:0 4px}
+.fine{display:flex; align-items:center; gap:8px}
+.chip{min-height:40px; padding:0 12px; border-radius:999px; border:1px solid var(--brass-dim); background:transparent; color:var(--muted); font-size:13px; font-variant-numeric:tabular-nums}
+.chip.on{border-color:var(--brass); background:rgba(205,166,94,.16); color:var(--text)}
+.chip.step{width:44px; padding:0; font-size:18px; line-height:1}
 .chip:disabled{opacity:.36}
-.sizing input{flex:1; min-width:0; height:36px; accent-color:var(--brass)}
+.fine input{flex:1; min-width:0; height:36px; accent-color:var(--brass)}
+.btn small{display:block; font-size:12px; font-weight:500; opacity:.7}
 .btn.wide{width:100%}
 
 /* EV 계기판 */
@@ -238,10 +244,12 @@ button:disabled{cursor:not-allowed}
           <button class="btn primary" id="bRaise">레이즈</button>
         </div>
         <div class="sizing">
-          <button class="chip" data-x="0.5">½팟</button>
-          <button class="chip" data-x="1">팟</button>
-          <button class="chip" data-x="all">올인</button>
-          <input type="range" id="slider" step="1" aria-label="레이즈 금액">
+          <div class="presets" id="presets"></div>
+          <div class="fine">
+            <button class="chip step" id="bMinus" aria-label="1BB 줄이기">−</button>
+            <input type="range" id="slider" step="1" aria-label="레이즈 금액">
+            <button class="chip step" id="bPlus" aria-label="1BB 늘리기">+</button>
+          </div>
         </div>
       </div>
       <button class="btn primary wide" id="bNext" hidden>다음 핸드</button>
@@ -687,15 +695,36 @@ function renderControls() {
   const on = phase === 'player', L = legal(0);
   $('bFold').disabled = !on || L.canCheck;
   $('bCall').disabled = !on;
-  for (const el of [$('bRaise'), $('slider'), ...document.querySelectorAll('[data-x]')]) el.disabled = !on || !L.canRaise;
+  for (const el of [$('bRaise'), $('slider'), $('bMinus'), $('bPlus'), ...$('presets').children]) el.disabled = !on || !L.canRaise;
   if (!on) { $('bCall').textContent = '체크 · 콜'; $('bRaise').textContent = '레이즈'; return; }
   $('bCall').textContent = L.canCheck ? '체크' : `콜 ${fmt(L.toCall)}`;
   raiseLabel();
 }
+const inBB = v => `${+(v / H.bb).toFixed(1)}BB`;
 function raiseLabel() {
   if (phase !== 'player' || !legal(0).canRaise) return;
   const v = +$('slider').value;
-  $('bRaise').textContent = (v - H.bets[0] === G.stacks[0] ? '올인 ' : H.bets[1] ? '레이즈 ' : '베팅 ') + fmt(v);
+  $('bRaise').innerHTML = (v - H.bets[0] === G.stacks[0] ? '올인 ' : H.bets[1] ? '레이즈 ' : '베팅 ') + fmt(v) + `<small>${inBB(v)}</small>`;
+  for (const b of $('presets').children) b.classList.toggle('on', +b.dataset.to === v);
+}
+// 레이즈 프리셋: 프리플랍 첫 레이즈는 BB 배수, 상대가 레이즈했으면 그 금액의 배수(BB로 표시), 플랍부터는 팟 비율
+function buildPresets() {
+  const L = legal(0), pot = H.committed[0] + H.committed[1];
+  const list = !H.board.length && H.bets[1] <= H.bb ? [2, 2.5, 3, 4].map(x => [null, x * H.bb])
+    : !H.board.length ? [2.5, 3, 4].map(x => [null, x * H.bets[1]])
+    : [['⅓팟', 1 / 3], ['½팟', 0.5], ['¾팟', 0.75], ['팟', 1]].map(([n, x]) => [n, H.bets[1] + x * (pot + L.toCall)]);
+  const seen = new Set();
+  $('presets').textContent = '';
+  for (const [name, v] of [...list, ['올인', L.maxTo]]) {
+    const to = Math.max(L.minTo, Math.min(L.maxTo, Math.round(v)));
+    // 최소 레이즈보다 작거나 올인에 닿는 프리셋은 이름과 실제 금액이 달라지므로 뺀다
+    if (seen.has(to) || (name !== '올인' && (Math.round(v) < L.minTo || to === L.maxTo))) continue;
+    seen.add(to);
+    const b = document.createElement('button');
+    b.className = 'chip'; b.dataset.to = to; b.textContent = name || inBB(to);
+    b.onclick = () => { $('slider').value = to; raiseLabel(); };
+    $('presets').append(b);
+  }
 }
 
 function renderGauge() {
@@ -770,6 +799,7 @@ async function advance() {
     if (H.toAct === 1) { await aiTurn(); continue; }
     const L = legal(0), sl = $('slider');
     sl.max = L.maxTo; sl.min = L.minTo; sl.value = L.minTo;
+    buildPresets();
     phase = 'player'; render();
     return;
   }
@@ -827,11 +857,9 @@ $('bFold').onclick = () => playerAct('fold');
 $('bCall').onclick = () => playerAct(legal(0).canCheck ? 'check' : 'call');
 $('bRaise').onclick = () => playerAct('raise', +$('slider').value);
 $('slider').oninput = raiseLabel;
-document.querySelectorAll('[data-x]').forEach(b => b.onclick = () => {
-  const L = legal(0), x = b.dataset.x, pot = H.committed[0] + H.committed[1];
-  $('slider').value = x === 'all' ? L.maxTo : Math.round(H.bets[1] + x * (pot + L.toCall));
-  raiseLabel();
-});
+const nudge = d => { $('slider').value = +$('slider').value + d * H.bb; raiseLabel(); }; // 범위 밖이면 슬라이더가 알아서 끝값으로 맞춘다
+$('bMinus').onclick = () => nudge(-1);
+$('bPlus').onclick = () => nudge(1);
 $('bNext').onclick = startHand;
 $('cheat').onchange = renderGauge;
 $('bSound').onclick = () => { soundOn = !soundOn; store.set('holdem.sound.v2', soundOn); renderSound(); sfx('chip'); };
