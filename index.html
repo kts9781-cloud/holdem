@@ -367,8 +367,9 @@ function strengthMap(board, dead) {
   const made = percentiles(l);
   return percentiles(l.map(([a, b]) => [a, b, 0.65 * made[a * 52 + b] + 0.35 * PCT[a * 52 + b]]));
 }
-// 상대의 공격 강도(팟 크기 레이즈 = 1)만큼 하위 핸드를 25%씩 잘라낸다
-const rangeCut = aggro => 1 - 0.75 ** aggro;
+// 상대 레인지 컷: 팟 크기 레이즈(공격 강도 1) 한 번이면 "상대가 레이즈하는 빈도(rr)"만큼의 상위 핸드로 좁힌다.
+// 아무 패로나 레이즈하는 상대(rr≈1)는 거의 안 좁히고, 골라서 레이즈하는 상대는 크게 좁힌다. 상위 10%보다는 안 좁힌다
+const rangeCut = (aggro, rr) => Math.min(0.9, 1 - rr ** aggro);
 
 // 몬테카를로 승률: 상대 핸드는 레인지(강도표에서 cut 이상)에서, 남은 보드는 무작위로
 function equity(hole, board, cut = 0, map = PCT, iters = ITERS) {
@@ -392,8 +393,8 @@ function equity(hole, board, cut = 0, map = PCT, iters = ITERS) {
 // ===== 게임 상태 (0 = 나, 1 = 컴퓨터) =====
 let G, H;
 function newGame() {
-  // stats: 베팅을 마주한 횟수, 폴드 횟수, 그때마다의 MDF(최소 방어 빈도) 합
-  G = { stacks: [START, START], button: Math.random() < 0.5 ? 0 : 1, hand: 0, stats: [0, 1].map(() => ({ faced: 0, folded: 0, mdf: 0 })) };
+  // stats: 베팅을 마주한 횟수, 폴드 횟수, 그때마다의 MDF(최소 방어 빈도) 합, 레이즈할 수 있었던 횟수, 실제 레이즈 횟수
+  G = { stacks: [START, START], button: Math.random() < 0.5 ? 0 : 1, hand: 0, stats: [0, 1].map(() => ({ faced: 0, folded: 0, mdf: 0, chances: 0, raises: 0 })) };
 }
 function put(p, x) { x = Math.min(x, G.stacks[p]); G.stacks[p] -= x; H.bets[p] += x; H.committed[p] += x; }
 function newHand() {
@@ -415,6 +416,7 @@ function legal(p) {
 function act(p, type, to) {
   const o = 1 - p, owe = H.bets[o] - H.bets[p], before = G.stacks[p];
   if (owe > 0) { const P = H.committed[0] + H.committed[1]; G.stats[p].faced++; G.stats[p].mdf += (P - owe) / P; }
+  if (legal(p).canRaise) { G.stats[p].chances++; if (type === 'raise') G.stats[p].raises++; }
   if (type === 'fold') { G.stats[p].folded++; H.folded = p; return '폴드'; }
   let label;
   if (type === 'raise') {
@@ -476,12 +478,17 @@ function decide(p) {
   const o = 1 - p, L = legal(p), owe = H.bets[o] - H.bets[p];
   const pot = H.committed[0] + H.committed[1] - (owe - L.toCall); // 내가 못 받는 상대 초과분 제외
   const map = strengthMap(H.board, new Set([...H.hole[p], ...H.board]));
-  const cut = rangeCut(H.aggro[o]), eq = equity(H.hole[p], H.board, cut, map);
-  // 상대 방어 성향: 1 = MDF만큼 콜, 1보다 크면 더 자주 콜 (사전값 1에서 시작해 관찰로 갱신)
-  const st = G.stats[o], defend = (st.faced - st.folded + 2) / (st.mdf + 2);
+  // 상대 성향 학습 (사전값에서 시작해 관찰로 갱신)
+  //  rr: 레이즈 빈도 (사전값 75%) / defend: 1 = MDF만큼 콜, 1보다 크면 더 자주 콜 (사전값 1)
+  const st = G.stats[o], rr = (st.raises + 3) / (st.chances + 4), defend = (st.faced - st.folded + 2) / (st.mdf + 2);
+  const cut = rangeCut(H.aggro[o], rr), eq = equity(H.hole[p], H.board, cut, map);
+  // 에퀴티 실현율: 뒤에 스트리트가 남으면 약한 패는 상대 베팅에 접게 돼 승률을 다 못 챙기고, 강한 패는 더 뽑아낸다
+  // (올인이면 끝까지 가므로 그대로). 승률 30% → 65%만, 50% → 85%, 70% → 105% 실현
+  const realize = (e, allIn) => H.board.length < 5 && !allIn ? e * Math.min(1.1, Math.max(0.6, 0.85 + (e - 0.5))) : e;
   const opts = [];
   if (!L.canCheck) opts.push({ type: 'fold', label: '폴드', ev: 0 });
-  opts.push({ type: L.canCheck ? 'check' : 'call', label: L.canCheck ? '체크' : '콜', to: H.bets[p] + L.toCall, ev: eq * (pot + L.toCall) - L.toCall });
+  opts.push({ type: L.canCheck ? 'check' : 'call', label: L.canCheck ? '체크' : '콜', to: H.bets[p] + L.toCall,
+              ev: realize(eq, L.toCall >= G.stacks[p] || !G.stacks[o]) * (pot + L.toCall) - L.toCall });
   if (L.canRaise) {
     const seen = new Set(), verb = H.bets[o] ? '레이즈' : '베팅';
     for (const [x, name] of [[0.5, '½팟'], [1, '팟'], [Infinity, '올인']]) {
@@ -495,7 +502,7 @@ function decide(p) {
       const eqC = equity(H.hole[p], H.board, cut + (1 - cut) * f, map);
       const q = G.stacks[o] > call ? 0.1 : 0; // 상대가 다시 레이즈할 확률 → 그때는 접고 건 돈을 잃는다
       opts.push({ type: 'raise', label: to === L.maxTo ? '올인' : `${verb} ${name}`, to, f, eqC,
-                  ev: f * pot + (1 - f - q) * (eqC * (pot + risk + call) - risk) - q * risk });
+                  ev: f * pot + (1 - f - q) * (realize(eqC, to === L.maxTo) * (pot + risk + call) - risk) - q * risk });
     }
   }
   // 위험 보정: EV 차이가 작으면 콜당했을 때 잃을 칩이 적은 쪽을 고른다 (그 칩의 4%만큼 감점)
@@ -508,7 +515,7 @@ function decide(p) {
   } else if (pick.type === 'check' && opts.some(x => x.type === 'raise') && eq < 0.35 && r < 0.12) {
     pick = opts.find(x => x.type === 'raise'); tag = '블러프';
   }
-  return { type: pick.type, to: pick.to, info: { eq, cut, opts, pick, tag, foldSeen: st.faced ? st.folded / st.faced : null,
+  return { type: pick.type, to: pick.to, info: { eq, cut, rr, opts, pick, tag, foldSeen: st.faced ? st.folded / st.faced : null,
     potOdds: L.toCall / (pot + L.toCall), iters: ITERS * opts.filter(x => x.eqC !== undefined).length + ITERS, street: H.board.length } };
 }
 
@@ -710,7 +717,7 @@ function renderGauge() {
     <div class="meter"><i style="width:${D.eq * 100}%"></i>${D.potOdds ? `<em style="left:${D.potOdds * 100}%"><span>팟 오즈 ${pct(D.potOdds)}</span></em>` : ''}</div>
     <dl class="meta">
       <div><dt>상대 레인지</dt><dd>상위 ${Math.round((1 - D.cut) * 100)}%</dd></div>
-      <div><dt>팟 오즈</dt><dd>${D.potOdds ? pct(D.potOdds) : '—'}</dd></div>
+      <div><dt>상대 레이즈 빈도</dt><dd>${pct(D.rr)}</dd></div>
       <div><dt>상대 폴드율(관찰)</dt><dd>${D.foldSeen === null ? '—' : pct(D.foldSeen)}</dd></div>
       <div><dt>시뮬레이션</dt><dd>${fmt(D.iters)}회</dd></div>
     </dl>
