@@ -65,7 +65,6 @@ button:disabled{cursor:not-allowed}
 .plate{position:relative; display:flex; flex-direction:column; align-items:center; min-width:74px; padding:3px 10px 4px; border-radius:12px;
   background:rgba(8,18,15,.78); border:1px solid var(--brass-dim); transition:box-shadow .3s, opacity .3s; line-height:1.2}
 .plate .name{font-weight:600; font-size:12px; white-space:nowrap}
-.plate .name em{font-style:normal; font-weight:500; font-size:10px; color:var(--brass); margin-left:4px}
 .plate .stack{font:16px/1.1 var(--display); color:var(--ivory); font-weight:400}
 .seat.me .plate{flex-direction:row; gap:10px; padding:5px 14px; border-radius:999px}
 .seat.me .plate .name{font-size:14px}
@@ -141,9 +140,9 @@ button:disabled{cursor:not-allowed}
   box-shadow:inset 0 1px 0 rgba(255,255,255,.6), 0 4px 10px rgba(0,0,0,.4);
   font-family:var(--display); transition:transform .25s, filter .25s, box-shadow .25s}
 .card.red{color:var(--red)}
-.card .idx{position:absolute; top:5%; left:9%; display:flex; flex-direction:column; align-items:center; font-size:calc(var(--cw) * .36); line-height:.95; letter-spacing:-.04em}
-.card .idx small{font:calc(var(--cw) * .22)/1 var(--sans)}
-.card .pip{position:absolute; right:9%; bottom:5%; font:calc(var(--cw) * .5)/1 var(--sans)}
+.card .idx{position:absolute; top:4%; left:7%; display:flex; flex-direction:column; align-items:center; font-size:calc(var(--cw) * .44); line-height:.95; letter-spacing:-.05em}
+.card .idx small{font:calc(var(--cw) * .29)/1 var(--sans)}
+.card .pip{position:absolute; right:7%; bottom:4%; font:calc(var(--cw) * .62)/1 var(--sans)}
 .card.back{background:
   repeating-linear-gradient(45deg, rgba(205,166,94,.28) 0 1px, transparent 1px 7px),
   repeating-linear-gradient(-45deg, rgba(205,166,94,.28) 0 1px, transparent 1px 7px), #5c1823;
@@ -376,7 +375,7 @@ const CHIP = 100; // 가장 작은 칩. 모든 금액은 100 단위
 // 실제 토너먼트처럼 오르는 블라인드
 const LEVELS = [[100, 200], [200, 400], [300, 600], [400, 800], [500, 1000], [600, 1200], [800, 1600], [1000, 2000], [1200, 2400],
   [1500, 3000], [2000, 4000], [2500, 5000], [3000, 6000], [4000, 8000], [5000, 10000], [6000, 12000], [8000, 16000], [10000, 20000]];
-const levelOf = hand => Math.min(LEVELS.length - 1, Math.floor((hand - 1) / G.hpl));
+// 블라인드 레벨은 G.level. 실제 대회처럼 화면의 토너먼트 시계가 시간으로 올린다 (엔진은 시간을 모른다)
 const RANKS = '23456789TJQKA', SUITS = 'shdc', SUIT_GLYPH = '♠♥♦♣';
 const rankOf = c => c >> 2, suitOf = c => c & 3;
 const card = s => RANKS.indexOf(s[0]) * 4 + SUITS.indexOf(s[1]);
@@ -499,12 +498,12 @@ function equity(hole, board, cuts, map = PCT, iters = ITERS) {
 
 // ===== 게임 상태 =====
 let G, H;
-// opts: names[], styles[], stacks[], hpl(레벨당 핸드 수)
+// opts: names[], styles[], stacks[]
 function newGame(o) {
   const n = o.stacks.length;
   // stats: 베팅을 마주한 횟수, 폴드 횟수, 그때마다의 MDF(최소 방어 빈도) 합, 레이즈할 수 있었던 횟수, 실제 레이즈 횟수
   G = { n, names: o.names, styles: o.styles, stacks: o.stacks.slice(), out: Array(n).fill(false), place: Array(n).fill(null),
-        hpl: o.hpl, hand: 0, button: Math.floor(Math.random() * n),
+        level: 0, hand: 0, button: Math.floor(Math.random() * n),
         stats: Array.from({ length: n }, () => ({ faced: 0, folded: 0, mdf: 0, chances: 0, raises: 0 })) };
 }
 const alive = () => G.stacks.map((_, i) => i).filter(i => !G.out[i]);
@@ -517,7 +516,7 @@ function put(p, x) { x = Math.min(x, G.stacks[p]); G.stacks[p] -= x; H.bets[p] +
 function newHand() {
   if (G.hand) G.button = nextOf(G.button, i => !G.out[i]);
   G.hand++;
-  const n = G.n, [sb, bb] = LEVELS[levelOf(G.hand)], d = [...Array(52).keys()];
+  const n = G.n, [sb, bb] = LEVELS[Math.min(G.level, LEVELS.length - 1)], d = [...Array(52).keys()];
   for (let i = 51; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [d[i], d[j]] = [d[j], d[i]]; }
   const z = () => Array(n).fill(0);
   H = { deck: d, hole: Array.from({ length: n }, () => []), board: [], bets: z(), committed: z(), aggro: z(),
@@ -692,7 +691,7 @@ function selfTest() {
   // 사이드팟 시나리오: 정해진 패·보드로 정산만 확인
   const pot = (stacks, committed, folded, holes, board, button = 0) => {
     const saved = [G, H];
-    G = { n: stacks.length, stacks: stacks.slice(), out: stacks.map(() => false), place: stacks.map(() => null), button, hand: 1, hpl: 10, stats: [] };
+    G = { n: stacks.length, stacks: stacks.slice(), out: stacks.map(() => false), place: stacks.map(() => null), button, hand: 1, level: 0, stats: [] };
     H = { committed: committed.slice(), bets: committed.map(() => 0), folded: folded.slice(), hole: holes.map(h => h ? h.split(' ').map(card) : []),
           board: board.split(' ').map(card), start: committed.map((c, i) => c + stacks[i]) };
     settle();
@@ -744,7 +743,8 @@ const sleep = ms => new Promise(r => setTimeout(r, T(ms)));
 const pct = x => (x * 100).toFixed(1) + '%';
 const STREET = { 0: '프리플랍', 3: '플랍', 4: '턴', 5: '리버' };
 const SHOT_CLOCK = 20, TIME_CHIP_SEC = 30, TIME_CHIPS = 3;
-let phase = 'lobby', mode = 'hu', bios = [], run = 0, nextTimer = null;
+const LEVEL_MIN = 5, LEVEL_MS = LEVEL_MIN * 60000 * (FAST ? 0.05 : 1); // 레벨마다 5분 (터보 대회)
+let phase = 'lobby', mode = 'hu', bios = [], run = 0, nextTimer = null, tourTimer = null;
 
 // 브라우저 저장소 (사생활 모드 등에서 막혀도 게임은 돌아가게)
 const store = {
@@ -756,12 +756,25 @@ const RFT = Object.assign({ 6: { games: 0, wins: 0, best: 0, sum: 0 }, 9: { game
 // 키 이름 변경: 예전 "소리 켬"(상태 표시) 버튼을 켜는 버튼으로 오해해 꺼 둔 설정을 초기화
 let soundOn = store.get('holdem.sound.v2', true), actx = null;
 
+// 오디오 장치: 없거나 닫혔으면 만들고, 실행 중이 아니면(suspended, iOS의 interrupted 등) 깨운다
+function audio() {
+  if (!actx || actx.state === 'closed') actx = new (window.AudioContext || window.webkitAudioContext)();
+  if (actx.state !== 'running') actx.resume().catch(() => {});
+  return actx;
+}
+// 화면을 내렸다 켜면 모바일 브라우저가 오디오를 멈추거나, '실행 중'인데 출력만 끊긴 채로 두기도 한다 → 돌아오면 새로 만든다
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || !actx) return;
+  const old = actx; actx = null; old.close().catch(() => {});
+});
+// iOS는 사용자 동작 안에서만 소리를 허락하므로 다음 터치 때 확실히 깨운다
+addEventListener('pointerdown', () => { if (soundOn && (!actx || actx.state !== 'running')) audio(); }, true);
+
 // 효과음: 음원 파일 없이 Web Audio로 합성
 function sfx(kind, n = 1) {
   if (!soundOn) return;
   try {
-    actx ||= new (window.AudioContext || window.webkitAudioContext)();
-    if (actx.state === 'suspended') actx.resume();
+    audio();
     const t = actx.currentTime + 0.01, bus = actx.createDynamicsCompressor(); // 겹치는 소리가 찢어지지 않게
     bus.threshold.value = -6; bus.knee.value = 6; bus.ratio.value = 8; bus.attack.value = 0.003; bus.release.value = 0.1;
     bus.connect(actx.destination);
@@ -800,24 +813,22 @@ const actSound = label => sfx(label === '폴드' ? 'fold' : label === '체크' ?
 
 // ===== 페르소나: 게임마다 이름·소개·성격·성향 수치를 무작위로 =====
 const NAME_POOL = ['빅토르', '민지', '레오', '사쿠라', '도윤', '엘레나', '마르코', '하나', '제이크', '수아', '이반', '루시아', '카이', '나탈리', '오스카', '유나'];
-const BIOS = {
-  pro: ['온라인 포커 출신 정석 플레이어', 'EV를 계산하는 차가운 머리', '대회 우승 경력의 베테랑', '표정 변화가 없는 수학자'],
-  rock: ['좋은 패만 기다리는 인내심의 화신', '20년 경력의 노련한 바위', '실수 없는 은퇴한 회계사', '한 번 걸면 진짜인 사람'],
-  station: ['끝까지 봐야 직성이 풀리는 호기심', '포커는 즐기러 온 사업가', '콜은 공짜라고 믿는 낙천가', '리버의 기적을 믿는 로맨티스트'],
-  lag: ['라스베이거스에서 온 하이롤러', '블러프를 사랑하는 승부사', '베팅이 곧 대화인 사람', '칩을 흔들어 압박하는 스타일'],
-};
+// 소개는 성격과 상관없는 배경만. 성격은 게임 중에 숨기고 토너먼트가 끝나면 공개한다 (쳐 보면서 읽어 내는 재미)
+const BIOS = ['부산에서 횟집을 하는 사장님', '수학과 대학원생', '은퇴한 프로야구 선수', '라스베이거스 딜러 출신', '스타트업 대표', '웹툰 작가',
+  '주말마다 홈게임을 여는 회사원', '마카오에서 막 돌아온 여행자', '체스 국가대표 출신', '전직 증권사 트레이더', '동네 카페 로스터', '의대 졸업반',
+  '택시 기사 20년 경력', '해외 대회 첫 출전', '포커 유튜브 채널 운영자', '은퇴한 고등학교 교사'];
 const pickOne = a => a[Math.floor(Math.random() * a.length)];
 const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 function persona() {
   const key = pickOne(Object.keys(STYLES)), b = STYLES[key], j = () => 0.8 + Math.random() * 0.4; // 같은 성격이어도 ±20% 흔든다
-  return { bio: pickOne(BIOS[key]), style: { tag: b.tag, risk: b.risk * j(), bluff: b.bluff * j(), slow: b.slow * j(), realize: b.realize * j(),
+  return { bio: pickOne(BIOS), style: { tag: b.tag, risk: b.risk * j(), bluff: b.bluff * j(), slow: b.slow * j(), realize: b.realize * j(),
     defend: b.defend * (0.95 + Math.random() * 0.1), press: b.press * j() } };
 }
 
 // ===== 좌석 배치: [좌석 x, y, 베팅 x, y] (테이블 대비 %). 좌석 0 = 나(아래 가운데, y=100은 아래에 붙임) =====
 const LAYOUT = {
   p: { // 세로(폰)
-    2: [[50, 97, 50, 68], [50, 12, 50, 31]],
+    2: [[50, 97, 25, 74], [50, 12, 50, 31]], // 헤즈업: 내 베팅은 카드 왼쪽 옆 (액션 글씨와 겹치지 않게)
     6: [[50, 97, 50, 64], [10, 66, 26, 60], [10, 27, 26, 32], [50, 10, 50, 21], [90, 27, 74, 32], [90, 66, 74, 60]],
     9: [[50, 97, 50, 64], [10, 76, 25, 70], [8, 54, 22, 58], [10, 30, 24, 34], [31, 10, 34, 21], [69, 10, 66, 21], [90, 30, 76, 34], [92, 54, 78, 58], [90, 76, 75, 70]],
   },
@@ -849,9 +860,8 @@ function buildTable() {
   for (let i = 0; i < n; i++) {
     const s = document.createElement('div');
     s.className = 'seat ' + (i ? 'ai' : 'me'); s.id = 'seat' + i;
-    const tag = i && n > 2 ? `<em>${G.styles[i].tag}</em>` : '';
     s.innerHTML = `<div class="hand" id="cards${i}"></div>
-      <div class="plate"><span class="name">${G.names[i]}${tag}</span><b class="stack" id="stack${i}"></b><span class="badge" id="badge${i}" hidden></span>
+      <div class="plate"><span class="name">${G.names[i]}</span><b class="stack" id="stack${i}"></b><span class="badge" id="badge${i}" hidden></span>
       ${i ? '' : `<button class="timechip" id="bTime" aria-label="타임칩 사용: 30초 추가"><b>+30초</b><span id="tcN"></span></button>`}</div>
       <div class="info"><span class="say" id="say${i}"></span><span class="hname" id="hname${i}"></span></div>`;
     if (i && n > 2) s.querySelector('.plate').onclick = () => toggleBio(i);
@@ -868,7 +878,7 @@ function toggleBio(i) {
   document.querySelectorAll('.bio').forEach(x => x.remove());
   if (open) return;
   const d = document.createElement('div');
-  d.className = 'bio'; d.innerHTML = `<b>${G.names[i]} · ${G.styles[i].tag}</b>${bios[i]}`;
+  d.className = 'bio'; d.innerHTML = `<b>${G.names[i]}</b>${bios[i]}`;
   plate.append(d);
 }
 
@@ -1029,9 +1039,8 @@ function render() {
   $('pot').textContent = fmt(sum(H.committed));
   $('potBox').hidden = !!H.result;
   $('banner').hidden = !H.result;
-  const lv = levelOf(G.hand), [sb, bb] = LEVELS[lv];
   $('handNo').textContent = `핸드 #${G.hand}`;
-  $('blinds').textContent = `레벨 ${lv + 1} · ${fmt(sb)}/${fmt(bb)}` + (lv < LEVELS.length - 1 ? ` · 다음 레벨까지 ${G.hpl - (G.hand - 1) % G.hpl}핸드` : '');
+  renderBlinds();
   renderTimeChips();
   renderControls();
   renderGauge();
@@ -1082,6 +1091,15 @@ function buildPresets() {
   }
 }
 
+// ===== 토너먼트 시계: 실제 대회처럼 시간이 지나면 블라인드가 오른다. 진행 중인 핸드는 그대로, 다음 핸드부터 적용 =====
+function renderBlinds() {
+  if (!G || phase === 'lobby' || phase === 'over') return;
+  const [sb, bb] = LEVELS[G.level], max = G.level >= LEVELS.length - 1, left = Math.max(0, G.levelEnds - performance.now()) / 1000;
+  const [nsb, nbb] = LEVELS[Math.min(G.level + 1, LEVELS.length - 1)], mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  $('blinds').textContent = `레벨 ${G.level + 1} · ${fmt(sb)}/${fmt(bb)}` + (max ? '' : left > 0 ? ` · 다음 레벨 ${mmss(Math.ceil(left))}` : ` · 다음 핸드부터 ${fmt(nsb)}/${fmt(nbb)}`);
+  if (!max && left <= 0 && !G.announced) { G.announced = true; log(`레벨 시간 종료 · 다음 핸드부터 ${fmt(nsb)}/${fmt(nbb)}`, 'level'); }
+}
+
 // ===== 샷클락(디지털 카운트다운)과 타임칩 =====
 let clock = null;
 function startClock() {
@@ -1117,7 +1135,7 @@ function renderGauge() {
   g.classList.toggle('sealed', !!D && !open);
   st.classList.toggle('busy', phase === 'ai');
   st.textContent = phase === 'ai' ? '계산 중' : !D ? '대기' : open ? '공개' : '봉인';
-  $('gWho').textContent = D && G.n > 2 ? `· ${who(D.who)} (${G.styles[D.who].tag})` : '';
+  $('gWho').textContent = D && G.n > 2 ? `· ${who(D.who)}` : '';
   if (g._D === D) return;
   g._D = D;
   if (!D) {
@@ -1259,6 +1277,9 @@ async function startHand(fresh = false) {
   clearInterval(nextTimer);
   if (!fresh && phase !== 'end') return; // 핸드가 끝난 뒤에만 다음 핸드 (중복 시작 방지)
   const me = run;
+  let up = false;
+  while (G.level < LEVELS.length - 1 && performance.now() >= G.levelEnds) { G.level++; G.levelEnds += LEVEL_MS; up = true; }
+  G.announced = false;
   newHand();
   for (let i = 0; i < G.n; i++) { say(i, ''); $('hname' + i).textContent = ''; $('seat' + i).classList.remove('win'); }
   document.querySelectorAll('.bio').forEach(x => x.remove());
@@ -1266,9 +1287,9 @@ async function startHand(fresh = false) {
   log(`핸드 #${G.hand} · 딜러 버튼 ${who(G.button)}`, 'head');
   phase = 'deal'; dealing = true;
   moveDealer(); render();
-  if (G.hand > 1 && levelOf(G.hand) !== levelOf(G.hand - 1)) {
-    const [sb, bb] = LEVELS[levelOf(G.hand)];
-    flashBanner(`블라인드 상승`, `레벨 ${levelOf(G.hand) + 1} · ${fmt(sb)}/${fmt(bb)}`);
+  if (up) {
+    const [sb, bb] = LEVELS[G.level];
+    flashBanner(`블라인드 상승`, `레벨 ${G.level + 1} · ${fmt(sb)}/${fmt(bb)}`);
     log(`블라인드 상승 → ${fmt(sb)}/${fmt(bb)}`, 'level'); sfx('level');
     const el = $('blinds'); el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
   }
@@ -1285,33 +1306,35 @@ function start(m) {
   run++; stopClock(); clearInterval(nextTimer);
   mode = m;
   const n = m === 'hu' ? 2 : m === 'ft6' ? 6 : 9;
-  if (n === 2) { newGame({ names: ['나', '컴퓨터'], styles: [null, 'pro'], stacks: [20000, 20000], hpl: 10 }); bios = ['', '']; }
+  if (n === 2) { newGame({ names: ['나', '컴퓨터'], styles: [null, 'pro'], stacks: [20000, 20000] }); bios = ['', '']; }
   else {
     const names = shuffle(NAME_POOL.slice()).slice(0, n - 1), ps = names.map(persona);
     const st = Array.from({ length: n }, () => (16 + Math.floor(Math.random() * 33)) * 500).sort((a, b) => a - b); // 8,000~24,000칩
     const mine = st.splice(n >> 1, 1)[0]; shuffle(st); // 나는 중간 정도 스택
-    newGame({ names: ['나', ...names], styles: [null, ...ps.map(p => p.style)], stacks: [mine, ...st], hpl: 6 });
+    newGame({ names: ['나', ...names], styles: [null, ...ps.map(p => p.style)], stacks: [mine, ...st] });
     bios = ['', ...ps.map(p => p.bio)];
   }
   G.timeChips = TIME_CHIPS;
+  G.levelEnds = performance.now() + LEVEL_MS; clearInterval(tourTimer); tourTimer = setInterval(renderBlinds, 1000);
   G.stats[0] = loadProfile(); // AI들은 지난 게임에서 본 내 스타일을 기억하고 시작한다
   $('modeName').textContent = n === 2 ? '헤즈업 홀덤' : `파이널 테이블 ${n}인`;
   $('modeSub').textContent = n === 2 ? '노리밋 · vs EV 컴퓨터' : '노리밋 토너먼트 · 우승을 노려라';
   $('lobby').hidden = true; $('endModal').hidden = true;
   $('log').textContent = '';
   buildTable(); renderRecord(); renderProfile();
-  if (n > 2) { log(`파이널 테이블 ${n}인 · 레벨마다 ${G.hpl}핸드`, 'head'); for (let i = 1; i < n; i++) log(`${who(i)} (${G.styles[i].tag}) · ${bios[i]} · ${fmt(G.stacks[i])}칩`, 'street'); }
+  if (n > 2) { log(`파이널 테이블 ${n}인 · 블라인드는 ${LEVEL_MIN}분마다 올라요`, 'head'); for (let i = 1; i < n; i++) log(`${who(i)} · ${bios[i]} · ${fmt(G.stacks[i])}칩`, 'street'); log('상대의 플레이 성향은 토너먼트가 끝나면 공개돼요', 'street'); }
   phase = 'deal';
   startHand(true);
 }
 function endTournament(won) {
-  stopClock(); clearInterval(nextTimer); phase = 'over';
+  stopClock(); clearInterval(nextTimer); clearInterval(tourTimer); phase = 'over';
   const place = won ? 1 : G.place[0], n = G.n;
   if (n === 2) { REC.games++; if (won) REC.won++; store.set('holdem.record', REC); }
   else { const r = RFT[n]; r.games++; if (won) r.wins++; r.best = r.best ? Math.min(r.best, place) : place; r.sum += place; store.set('holdem.record.ft', RFT); }
   renderRecord();
   $('endTitle').textContent = won ? (n === 2 ? '완승!' : '우승!') : n === 2 ? '패배' : `${place}위로 탈락`;
-  $('endSub').textContent = won ? `${n === 2 ? '컴퓨터의 칩을 모두 땄어요' : `${n}명 중 마지막까지 살아남았어요`} · ${G.hand}핸드` : `${G.hand}핸드 · 레벨 ${levelOf(G.hand) + 1}`;
+  $('endSub').textContent = won ? `${n === 2 ? '컴퓨터의 칩을 모두 땄어요' : `${n}명 중 마지막까지 살아남았어요`} · ${G.hand}핸드` : `${G.hand}핸드 · 레벨 ${G.level + 1}`;
+  if (n > 2) $('endSub').textContent += ' · 상대 성향 공개';
   const rows = G.names.map((nm, i) => ({ i, nm, place: G.place[i] })).sort((a, b) => (a.place ?? 0) - (b.place ?? 0));
   $('standings').innerHTML = rows.map(r => `<li class="${r.i ? '' : 'me'}"><span>${r.place ? r.place + '위' : '진행 중'}</span><span>${r.nm}${r.i && n > 2 ? ` · ${G.styles[r.i].tag}` : ''}</span><span>${r.place ? '' : fmt(G.stacks[r.i]) + '칩'}</span></li>`).join('');
   $('endModal').hidden = false;
@@ -1328,7 +1351,7 @@ function chipRain() { // 우승 축하: 칩이 쏟아진다
   }
 }
 function showLobby() {
-  run++; stopClock(); clearInterval(nextTimer); phase = 'lobby';
+  run++; stopClock(); clearInterval(nextTimer); clearInterval(tourTimer); phase = 'lobby';
   $('endModal').hidden = true; $('lobby').hidden = false;
   $('lr-hu').textContent = REC.games ? `${REC.won}승 ${REC.games - REC.won}패` : '';
   for (const n of [6, 9]) { const r = RFT[n]; $('lr-ft' + n).textContent = r.games ? `${r.games}판 · 우승 ${r.wins}회 · 최고 ${r.best}위` : ''; }
