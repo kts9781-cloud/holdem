@@ -243,6 +243,8 @@ button:disabled{cursor:not-allowed}
 .record dt{font-size:12px; color:var(--muted)}
 .record dd{margin:2px 0 0; font:20px/1.2 var(--display); color:var(--ivory)}
 .record dd small{margin-left:6px; font:12px var(--mono); color:var(--muted)}
+.prof{display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin-top:12px; padding-top:10px; border-top:1px solid rgba(205,166,94,.14); font-size:12px; line-height:1.5; color:var(--muted)}
+.prof .linkbtn{flex:none; font-size:12px}
 
 /* 로비·결과 모달 */
 .overlay{position:fixed; inset:0; z-index:40; display:grid; place-items:center; padding:24px 16px; background:rgba(12,5,7,.72); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px)}
@@ -337,6 +339,7 @@ button:disabled{cursor:not-allowed}
         <div><dt id="rL2">핸드 승률</dt><dd id="r2"></dd></div>
         <div><dt id="rL3">최대로 딴 팟</dt><dd id="r3"></dd></div>
       </dl>
+      <div class="prof"><span id="prof"></span><button class="linkbtn" id="bForget">기억 초기화</button></div>
     </section>
     <section class="log">
       <h2>기록</h2>
@@ -348,7 +351,7 @@ button:disabled{cursor:not-allowed}
 <div class="overlay" id="lobby">
   <div class="sheet">
     <h2>게임 선택</h2>
-    <p>나를 뺀 모든 자리는 각자 우승을 노리는 EV AI예요</p>
+    <p>나를 뺀 모든 자리는 각자 우승을 노리는 EV AI예요. AI는 내 플레이 스타일을 기억해요</p>
     <div class="modes">
       <button class="mode" data-mode="hu"><b>헤즈업</b><span>EV 컴퓨터와 1:1 · 각자 20,000칩</span><em id="lr-hu"></em></button>
       <button class="mode" data-mode="ft6"><b>파이널 테이블 6인</b><span>무작위 페르소나 AI 5명 · 토너먼트</span><em id="lr-ft6"></em></button>
@@ -1196,10 +1199,12 @@ async function advance() {
 }
 async function playerAct(type, to) {
   if (phase !== 'player') return;
+  const me = run;
   stopClock(); phase = 'busy';
   const before = G.stacks[0], label = act(0, type, to);
   render();
   await showAction(0, label, before - G.stacks[0]);
+  if (me !== run) return; // 연출 중에 로비로 나갔으면 이전 게임을 이어 가지 않는다
   phase = 'deal'; render();
   advance();
 }
@@ -1237,6 +1242,7 @@ async function onHandEnd(me) {
     $('seat' + i).classList.add('out');
     log(`${who(i)} 탈락 · ${G.place[i]}위`, 'level');
   }
+  if (H.hole[0].length) { G.stats[0].hands++; store.set(PROFILE_KEY, G.stats[0]); renderProfile(); }
   if (G.n === 2) { REC.hands++; if (heroWon && !tie) { REC.handsWon++; REC.bestPot = Math.max(REC.bestPot, R.pot); } store.set('holdem.record', REC); }
   render();
   if (G.out[0] || alive().length === 1) { await sleep(1400); if (me === run) endTournament(!G.out[0]); return; }
@@ -1288,11 +1294,12 @@ function start(m) {
     bios = ['', ...ps.map(p => p.bio)];
   }
   G.timeChips = TIME_CHIPS;
+  G.stats[0] = loadProfile(); // AI들은 지난 게임에서 본 내 스타일을 기억하고 시작한다
   $('modeName').textContent = n === 2 ? '헤즈업 홀덤' : `파이널 테이블 ${n}인`;
   $('modeSub').textContent = n === 2 ? '노리밋 · vs EV 컴퓨터' : '노리밋 토너먼트 · 우승을 노려라';
   $('lobby').hidden = true; $('endModal').hidden = true;
   $('log').textContent = '';
-  buildTable(); renderRecord();
+  buildTable(); renderRecord(); renderProfile();
   if (n > 2) { log(`파이널 테이블 ${n}인 · 레벨마다 ${G.hpl}핸드`, 'head'); for (let i = 1; i < n; i++) log(`${who(i)} (${G.styles[i].tag}) · ${bios[i]} · ${fmt(G.stacks[i])}칩`, 'street'); }
   phase = 'deal';
   startHand(true);
@@ -1338,6 +1345,30 @@ function renderRecord() {
     $('rL3').textContent = '평균 순위'; $('r3').textContent = r.games ? `${(r.sum / r.games).toFixed(1)}위` : '—';
   }
 }
+// ===== AI가 기억하는 내 스타일 (브라우저에 저장, 모든 모드 공통) =====
+const PROFILE_KEY = 'holdem.profile';
+function loadProfile() {
+  const p = Object.assign({ faced: 0, folded: 0, mdf: 0, chances: 0, raises: 0, hands: 0 }, store.get(PROFILE_KEY, {}));
+  // ponytail: 오래된 기록이 스타일 변화를 막지 않게 레이즈 기회 400번 분량으로 눌러 둔다(비율은 그대로). 더 정교하게 하려면 지수 감쇠
+  const k = p.chances > 400 ? 400 / p.chances : 1;
+  for (const f of ['faced', 'folded', 'mdf', 'chances', 'raises']) p[f] *= k;
+  return p;
+}
+function renderProfile() {
+  const p = G ? G.stats[0] : loadProfile(), r = x => Math.round(x * 100);
+  $('prof').textContent = p.hands
+    ? `AI가 기억하는 나 · 레이즈 ${r(p.raises / Math.max(1, p.chances))}% · 베팅에 폴드 ${r(p.folded / Math.max(1, p.faced))}% · ${fmt(p.hands)}핸드`
+    : 'AI가 아직 나를 몰라요. 칠수록 내 스타일을 기억해요';
+}
+let forgetArm = null;
+$('bForget').onclick = () => { // 두 번 눌러야 지운다
+  const b = $('bForget');
+  if (!forgetArm) { b.textContent = '한 번 더 누르면 지워요'; b.classList.add('warn'); forgetArm = setTimeout(() => { forgetArm = null; b.textContent = '기억 초기화'; b.classList.remove('warn'); }, 3000); return; }
+  clearTimeout(forgetArm); forgetArm = null; b.textContent = '기억 초기화'; b.classList.remove('warn');
+  try { localStorage.removeItem(PROFILE_KEY); } catch {}
+  if (G) Object.assign(G.stats[0], { faced: 0, folded: 0, mdf: 0, chances: 0, raises: 0, hands: 0 });
+  renderProfile(); log('AI의 기억을 지웠어요', 'level');
+};
 function renderSound() {
   $('bSound').textContent = soundOn ? '소리 끄기' : '소리 켜기'; // 누르면 일어날 일을 쓴다
   $('bSound').setAttribute('aria-pressed', soundOn);
@@ -1365,7 +1396,7 @@ $('bLobby').onclick = () => {
 };
 addEventListener('resize', () => G && placeSeats());
 
-renderSound(); renderRecord(); showLobby();
+renderSound(); renderRecord(); renderProfile(); showLobby();
 if (Q.has('mode')) start(Q.get('mode')); // 확인용: ?mode=ft6 로 바로 시작
 if (Q.has('test')) {
   const t = selfTest();
