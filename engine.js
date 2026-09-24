@@ -141,6 +141,7 @@ const alive = () => G.stacks.map((_, i) => i).filter(i => !G.out[i]);
 const nextOf = (from, ok) => { for (let k = 1; k <= G.n; k++) { const i = (from + k) % G.n; if (ok(i)) return i; } return -1; };
 const live = () => H.folded.map((f, i) => f ? -1 : i).filter(i => i >= 0); // 이번 핸드에서 아직 안 접은 사람
 const maxBet = () => Math.max(...H.bets);
+const allInRunout = () => live().length > 1 && live().filter(i => G.stacks[i] > 0).length <= 1; // 올인으로 더 걸 사람이 없다 → 패를 까고 남은 카드만 깐다
 const needsAction = i => !H.folded[i] && G.stacks[i] > 0 && (!H.acted[i] || H.bets[i] < maxBet());
 function put(p, x) { x = Math.min(x, G.stacks[p]); G.stacks[p] -= x; H.bets[p] += x; H.committed[p] += x; }
 

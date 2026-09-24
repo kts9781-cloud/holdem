@@ -8,7 +8,7 @@ const MP = { id: null, code: null, me: null, seat: 0, n: 0, users: [], host: nul
              skew: 0, deadline: null, nextHandAt: null, tickAt: 0, subs: [], watch: null, poll: null, waitCh: null };
 const L = s => (s - MP.seat + MP.n) % MP.n;                                  // 서버 좌석 → 화면 좌석
 const rot = a => a && Array.from({ length: MP.n }, (_, i) => a[(i + MP.seat) % MP.n]); // 서버 배열 → 화면 배열
-const serverNow = () => Date.now() + MP.skew;
+const serverNow = () => Date.now() + (MP.skew ?? 0);
 const esc = t => String(t).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 
 async function mpClient() {
@@ -44,16 +44,19 @@ function mpNick(code) {
     try { const r = await mpCall('profile', { nickname: $('mpNick').value }); code ? mpJoin(code) : mpMenu(r.nickname); }
     catch (e) { sheetErr(e.message); }
   };
-  $('mpNickOk').onclick = go; $('mpNick').onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) go(); }; // false를 돌려주면 모든 키 입력이 취소된다 if (matchMedia('(pointer: fine)').matches) $('mpNick').focus(); // iOS는 자동 포커스하면 탭해도 키보드가 안 뜬다
+  $('mpNickOk').onclick = go;
+  $('mpNick').onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) go(); }; // false를 돌려주면 모든 키 입력이 취소된다
+  if (matchMedia('(pointer: fine)').matches) $('mpNick').focus(); // iOS는 자동 포커스하면 탭해도 키보드가 안 뜬다
 }
 function mpMenu(nick) {
-  sheet(`<h2>친구와 치기</h2><p>${nick ? esc(nick) + ' 님, ' : ''}방을 만들거나 코드로 들어가세요. 빈자리는 AI가 채워요</p>
-    <div class="mp-seats">${[2, 6, 9].map(n => `<button class="mode" data-seats="${n}"><b>${n === 2 ? '1:1 헤즈업' : `${n}인 테이블`}</b><span>${n === 2 ? '친구와 둘이' : `최대 ${n}명 · 빈자리는 AI`}</span></button>`).join('')}</div>
+  sheet(`<h2>친구와 치기</h2><p>${nick ? esc(nick) + ' 님, ' : ''}방을 만들거나 코드로 들어가세요</p>
+    <label class="toggle mp-ai"><input type="checkbox" id="mpAI" checked>빈자리는 AI로 채우기</label>
+    <div class="mp-seats">${[2, 6, 9].map(n => `<button class="mode" data-seats="${n}"><b>${n === 2 ? '1:1 헤즈업' : `${n}인 테이블`}</b><span>${n === 2 ? '친구와 둘이' : `최대 ${n}명`}</span></button>`).join('')}</div>
     <div class="mp-join"><input class="mp-input" id="mpCode" maxlength="6" placeholder="초대 코드 6자리" autocapitalize="characters"><button class="btn primary" id="mpJoinBtn">참가</button></div>
     <p class="mp-err" id="mpErr"></p>
     <button class="btn wide ghost" onclick="mpClose()">돌아가기</button>`);
   document.querySelectorAll('[data-seats]').forEach(b => b.onclick = async () => {
-    try { const r = await mpCall('create', { seats: +b.dataset.seats }); MP.id = r.id; MP.code = r.code; mpWait(); } catch (e) { sheetErr(e.message); }
+    try { const r = await mpCall('create', { seats: +b.dataset.seats, ai: $('mpAI').checked }); MP.id = r.id; MP.code = r.code; mpWait(); } catch (e) { sheetErr(e.message); }
   });
   $('mpJoinBtn').onclick = () => mpJoin($('mpCode').value);
   $('mpCode').onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) mpJoin($('mpCode').value); };
@@ -71,17 +74,17 @@ async function mpJoin(code) {
 async function mpWait() {
   const link = `${location.origin}${location.pathname}?room=${MP.code}`;
   const draw = async () => {
-    const { data: T } = await sb.from('tables').select('host, seats, status').eq('id', MP.id).single();
+    const { data: T } = await sb.from('tables').select('host, seats, status, ai').eq('id', MP.id).single();
     if (T.status !== 'waiting') { mpUnsubWait(); return mpEnterGame(); }
     const { data: ps } = await sb.from('table_players').select('seat, user_id, nickname').eq('table_id', MP.id).order('seat');
     MP.host = T.host;
     const key = JSON.stringify([T, ps]);
     if (key === MP.waitKey) return; // 바뀐 게 없으면 그대로 (다시 그리면 그 순간의 탭이 사라진다)
     MP.waitKey = key;
-    sheet(`<h2>대기실</h2><p>코드 <b class="mp-code">${MP.code}</b> · ${ps.length}/${T.seats}명</p>
+    sheet(`<h2>대기실</h2><p>코드 <b class="mp-code">${MP.code}</b> · ${ps.length}/${T.seats}명${T.ai ? '' : ' · 사람끼리'}</p>
       <div class="mp-link"><input class="mp-input" readonly value="${esc(link)}"><button class="btn" id="mpCopy">링크 복사</button></div>
       <ol class="standings">${Array.from({ length: T.seats }, (_, s) => { const p = ps.find(x => x.seat === s);
-        return `<li class="${p && p.user_id === MP.me ? 'me' : ''}"><span>${s + 1}번</span><span>${p ? esc(p.nickname) + (p.user_id === T.host ? ' · 방장' : '') : 'AI가 채울 자리'}</span><span></span></li>`; }).join('')}</ol>
+        return `<li class="${p && p.user_id === MP.me ? 'me' : ''}"><span>${s + 1}번</span><span>${p ? esc(p.nickname) + (p.user_id === T.host ? ' · 방장' : '') : T.ai ? 'AI가 채울 자리' : '빈자리'}</span><span></span></li>`; }).join('')}</ol>
       <p class="mp-err" id="mpErr"></p>
       <div class="row">${T.host === MP.me ? '<button class="btn primary" id="mpStart">시작하기</button>' : '<button class="btn" disabled>방장이 시작하길 기다리는 중…</button>'}<button class="btn" onclick="mpClose()">나가기</button></div>`);
     $('mpCopy').onclick = async () => { try { await navigator.clipboard.writeText(link); $('mpCopy').textContent = '복사했어요'; } catch { $('mpCopy').textContent = '길게 눌러 복사'; } };
@@ -105,7 +108,7 @@ async function mpEnterGame() {
   const { data: T } = await sb.from('tables').select('public, seq, status').eq('id', MP.id).single();
   const P = T.public;
   MP.n = P.n; MP.users = P.users; MP.seat = P.users.indexOf(MP.me); MP.lastSeq = T.seq; MP.queue = [];
-  MP.deadline = P.deadline; MP.nextHandAt = P.nextHandAt; MP.skew = 0;
+  MP.deadline = P.deadline; MP.nextHandAt = P.nextHandAt; MP.skew = null;
   G = { n: P.n, names: rot(P.names), styles: Array(P.n).fill(null), stacks: rot(P.stacks), out: rot(P.out), place: rot(P.place), button: L(P.button),
         hand: P.hand, level: P.level, levelEnds: performance.now() + (P.levelEnds - Date.now()), timeChips: P.timeChips[MP.seat],
         sitOut: rot(P.sitOut), stats: Array.from({ length: P.n }, () => ({})) };
@@ -114,12 +117,14 @@ async function mpEnterGame() {
   H = { hole: Array.from({ length: P.n }, (_, i) => G.out[i] ? [] : i === 0 ? mine : [-1, -1]), board: P.board, bets: rot(P.bets), committed: rot(P.committed),
         folded: rot(P.folded), canRaise: rot(P.canRaise), lastRaise: P.lastRaise, toAct: P.toAct >= 0 ? L(P.toAct) : -1, bb: P.bb, sb: P.sb,
         sbSeat: L(P.sbSeat), bbSeat: L(P.bbSeat), result: null, decision: null, busted: [] };
+  if (P.show) { for (const [ss, cards] of Object.entries(P.show)) H.hole[L(+ss)] = cards; H.shown = true; }
   bios = Array(P.n).fill('');
   $('mpSheet').hidden = true; $('lobby').hidden = true; $('endModal').hidden = true;
-  $('modeName').textContent = '친구와 치기'; $('modeSub').textContent = `코드 ${MP.code} · ${P.n}인`;
+  $('modeName').textContent = '친구와 치기'; $('modeSub').textContent = `코드 ${MP.code} · ${P.names.filter(Boolean).length}명`;
   $('log').textContent = ''; log(`친구와 치기 · 코드 ${MP.code} · 블라인드는 5분마다 올라요`, 'head');
   $('cheat').checked = false; $('cheat').disabled = true; // 친구 패를 엿볼 수 있으므로 멀티에서는 막는다
   buildTable(); renderRecord(); renderProfile();
+  G.names.forEach((nm, i) => { $('seat' + i).hidden = !nm; }); // AI 없는 방의 빈자리
   $('board').textContent = ''; $('board')._cards = [];
   phase = P.phase === 'over' ? 'over' : P.phase === 'between' ? 'end' : H.toAct === 0 ? 'player' : 'wait';
   if (phase === 'end') H.result = { pots: [], pot: 0, showdown: false, win: [] };
@@ -153,6 +158,8 @@ async function mpPoll() {
   if (data?.length) mpReceive(data);
 }
 function mpReceive(rows) {
+  // 서버 시각 차이: 받은 순간 기준 (저장 시각 ≤ 받은 시각이라 가장 큰 값이 실제에 가깝다). 재생할 때 재면 재생이 밀린 만큼 틀어진다
+  for (const r of rows) if (r.payload?.now) MP.skew = Math.max(MP.skew ?? -Infinity, r.payload.now - Date.now());
   for (const r of rows) if (r.seq > MP.lastSeq && !MP.queue.some(q => q.seq === r.seq)) MP.queue.push(r);
   MP.queue.sort((a, b) => a.seq - b.seq);
   mpPump();
@@ -206,8 +213,8 @@ async function mpLeave() { // 게임 중 나가기 = 자리 비움 (코드나 �
 
 async function mpApply(e) {
   const me = run;
-  INSTANT = document.hidden || MP.queue.length > 3; // 가려진 화면·밀린 이벤트는 연출 없이 따라잡는다
-  if (e.now) MP.skew = e.now - Date.now();
+  // 가려진 화면이나 재생 예정보다 10초 넘게 밀린 이벤트는 연출 없이 따라잡는다 (한 번에 온 올인 런아웃은 그대로 연출)
+  INSTANT = document.hidden || (e.due ? serverNow() - e.due > 10000 : MP.queue.length > 3);
   const s = e.seat !== undefined ? L(e.seat) : null;
   const snap = () => { if (!e.stacks) return;
     G.stacks = rot(e.stacks); H.bets = rot(e.bets); H.committed = rot(e.committed); H.folded = rot(e.folded);
@@ -249,6 +256,13 @@ async function mpApply(e) {
       phase = 'deal'; render();
       await sleep(live().filter(i => G.stacks[i]).length > 1 ? 650 : 1100);
       return;
+    }
+    case 'reveal': { // 올인으로 더 걸 사람이 없다: 남은 카드를 깔기 전에 패부터 공개
+      await collectAnim();
+      snap();
+      for (const [ss, cards] of Object.entries(e.show)) H.hole[L(+ss)] = cards;
+      phase = 'deal'; render(); // 보드는 다음 deal 이벤트에서
+      return revealRunout();
     }
     case 'turn': {
       snap(); MP.deadline = e.deadline;
@@ -313,7 +327,7 @@ function mpEnd(e) {
   const place = rot(e.place), styles = e.styles ? rot(e.styles) : [], mine = place[0];
   $('endTitle').textContent = mine === 1 ? '우승!' : mine ? `${mine}위` : '게임 종료';
   $('endSub').textContent = `친구와 치기 · ${G.hand}핸드${styles.some(Boolean) ? ' · AI 성향 공개' : ''}`;
-  const rows = G.names.map((nm, i) => ({ i, nm, place: place[i] })).sort((a, b) => (a.place ?? 0) - (b.place ?? 0));
+  const rows = G.names.map((nm, i) => ({ i, nm, place: place[i] })).filter(r => r.nm).sort((a, b) => (a.place ?? 0) - (b.place ?? 0));
   $('standings').innerHTML = rows.map(r => `<li class="${r.i ? '' : 'me'}"><span>${r.place ? r.place + '위' : '진행 중'}</span><span>${esc(r.nm)}${styles[r.i] ? ` · AI ${styles[r.i]}` : ''}</span><span>${r.place ? '' : fmt(G.stacks[r.i]) + '칩'}</span></li>`).join('');
   $('bAgain').hidden = true;
   $('endModal').hidden = false;

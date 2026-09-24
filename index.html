@@ -55,7 +55,7 @@ button:disabled{cursor:not-allowed}
 @media (min-width:880px){ .layout{grid-template-columns:minmax(0,1fr) 340px; align-items:start} }
 
 /* ===== 테이블: 좌석을 둘레에 배치 ===== */
-.table{position:relative; isolation:isolate; margin:14px 12px 18px; aspect-ratio:3/4; --chip:24px;
+.table{position:relative; isolation:isolate; margin:14px 12px 18px; aspect-ratio:3/4; --chip:24px; touch-action:manipulation; -webkit-user-select:none; user-select:none; /* 두 번 탭 = 체크 (확대·글자 선택 막기) */
   border-radius:clamp(56px, 16vw, 190px);
   /* 실제 울 펠트 사진 (Higgsfield 생성) 위에 천장 조명처럼 가운데를 밝히고 가장자리를 어둡게 */
   background:radial-gradient(ellipse 60% 50% at 50% 45%, rgba(120,230,190,.16), transparent 70%),
@@ -274,6 +274,7 @@ button:disabled{cursor:not-allowed}
 #bAgain[hidden] + #bToLobby{grid-column:1 / -1}
 .mp-input{width:100%; min-height:48px; padding:0 14px; border-radius:12px; border:1px solid var(--brass-dim); background:rgba(0,0,0,.35); color:var(--text); font:16px var(--sans)}
 .mp-seats{display:grid; gap:8px; margin-bottom:12px}
+.mp-ai{min-height:44px; margin:0 0 6px; justify-content:center; font-size:14px; color:var(--text)} .mp-ai input{width:20px; height:20px}
 .mp-join,.mp-link{display:grid; grid-template-columns:1fr auto; gap:8px; margin-bottom:10px}
 .mp-err{min-height:20px; margin:6px 0; color:var(--neg); font-size:13px; text-align:center}
 .mp-code{font:24px var(--mono); letter-spacing:.12em; color:var(--brass)}
@@ -554,7 +555,7 @@ function setBoard(cards) {
 let dealing = false;
 function renderHole(i) {
   const el = $('cards' + i), cards = H.hole[i];
-  const show = i === 0 || (!!H.result && H.result.showdown && !H.folded[i]);
+  const show = i === 0 || (!H.folded[i] && (!!H.shown || !!H.result?.showdown)); // 올인 런아웃이면 미리 공개
   const key = `${G.hand}|${H.folded[i]}|${show}|${cards.length}`;
   if (el._key === key) return;
   const flip = show && el._hand === G.hand && el._show === false && !H.folded[i];
@@ -692,6 +693,7 @@ function render() {
   renderTimeChips();
   renderControls();
   renderGauge();
+  moveDealer(); // 명패 폭은 칩 금액에 따라 바뀌므로 그릴 때마다 딜러 버튼을 다시 붙인다
 }
 function renderTimeChips() {
   $('tcN').textContent = G.timeChips;
@@ -851,6 +853,7 @@ async function advance() {
     if (s === 'deal') {
       await collectAnim();
       phase = 'deal';
+      if (!H.shown && allInRunout()) await revealRunout(); // 올인: 남은 카드를 깔기 전에 패부터 모두 공개
       const k = H.board.length;
       log(`${STREET[k]}  ${H.board.slice(k === 3 ? 0 : -1).map(cardText).join(' ')}`, 'street');
       for (const i of live()) if (G.stacks[i]) say(i, '');
@@ -866,6 +869,13 @@ async function advance() {
     phase = 'player'; render(); startClock();
     return;
   }
+}
+async function revealRunout() {
+  H.shown = true;
+  for (const i of live()) renderHole(i);
+  sfx('deal', live().length);
+  log(`올인 · 패 공개  ${live().map(i => `${who(i)} ${H.hole[i].map(cardText).join(' ')}`).join(' / ')}`, 'street');
+  await sleep(1200);
 }
 async function playerAct(type, to) {
   if (mode === 'mp') return mpAct(type, to);
@@ -1055,6 +1065,17 @@ function renderSound() {
 
 $('bFold').onclick = () => playerAct('fold');
 $('bCall').onclick = () => playerAct(legal(0).canCheck ? 'check' : 'call');
+// 테이블을 두 번 탭하면 체크 (실제 테이블을 두 번 두드리는 것처럼). 체크할 수 있을 때만, 버튼·명패 위는 제외
+let lastTap = { t: 0, x: 0, y: 0 };
+$('table').addEventListener('pointerup', e => {
+  if (e.target.closest('button, .plate')) return;
+  if (e.timeStamp - lastTap.t < 350 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 40) {
+    lastTap.t = 0;
+    if (phase === 'player' && legal(0).canCheck) playerAct('check');
+    return;
+  }
+  lastTap = { t: e.timeStamp, x: e.clientX, y: e.clientY };
+});
 $('bRaise').onclick = () => playerAct('raise', +$('slider').value);
 $('slider').oninput = raiseLabel;
 const nudge = d => { $('slider').value = +$('slider').value + d * H.bb; raiseLabel(); }; // 범위 밖이면 슬라이더가 알아서 끝값으로 맞춘다
