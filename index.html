@@ -63,7 +63,8 @@ button:disabled{cursor:not-allowed}
     url("assets/felt.jpg") center / cover, var(--felt);
   box-shadow:0 0 0 10px var(--rail), 0 0 0 11px var(--brass-dim), 0 0 0 13px #120806, 0 28px 60px rgba(0,0,0,.55), inset 0 0 70px rgba(0,0,0,.5)}
 .table::before{content:""; position:absolute; inset:12px; z-index:-1; border-radius:inherit; border:1px solid rgba(205,166,94,.2); pointer-events:none}
-@media (min-width:700px){ .table{aspect-ratio:16/10; --chip:28px} .table[data-n="2"]{aspect-ratio:16/11} }
+/* 넓은 테이블(.wide)은 화면 폭이 아니라 테이블 자신의 폭으로 정한다 → 폴드 펼침처럼 두 칸 배치에서도 좌석 배치와 모양이 맞는다 */
+.table.wide{aspect-ratio:16/10; --chip:28px} .table.wide[data-n="2"]{aspect-ratio:16/11}
 
 .seat{position:absolute; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; gap:3px; width:max-content; z-index:2}
 .seat.me{transform:translate(-50%,-100%); gap:6px}
@@ -88,7 +89,7 @@ button:disabled{cursor:not-allowed}
 .seat.ai .hand{margin-bottom:-12px; z-index:-1}
 .seat.me .hand{--cw:clamp(44px, 12vw, 60px); gap:6px}
 .table[data-n="2"] .seat.ai .hand{--cw:42px; gap:5px; margin-bottom:0}
-@media (min-width:700px){ .hand{--cw:34px} .seat.me .hand{--cw:66px} }
+.table.wide .hand{--cw:34px} .table.wide .seat.me .hand{--cw:66px}
 .info{display:flex; gap:8px; min-height:18px; font-size:12px; line-height:18px; white-space:nowrap}
 .say{color:var(--ivory); font-weight:500; text-shadow:0 1px 3px rgba(0,0,0,.7)}
 .say.pop{animation:pop .3s ease-out}
@@ -97,7 +98,7 @@ button:disabled{cursor:not-allowed}
   background:rgba(8,12,11,.95); border:1px solid var(--brass-dim); font-size:12px; line-height:1.5; color:var(--muted); white-space:normal; animation:pop .2s ease-out}
 .bio b{display:block; color:var(--text); font-size:13px}
 
-.timechip{position:absolute; right:-54px; bottom:4px; width:44px; height:44px; border-radius:50%; border:0; padding:0;
+.timechip{position:absolute; right:-54px; bottom:0; width:44px; height:44px; border-radius:50%; border:0; padding:0;
   background:radial-gradient(circle, #f2e8d2 0 40%, transparent 41%), repeating-conic-gradient(var(--brass) 0 20deg, #7a5a1e 20deg 40deg);
   box-shadow:0 3px 8px rgba(0,0,0,.5), inset 0 0 0 3px rgba(0,0,0,.25); color:#3a2608; font:700 11px/1 var(--sans)}
 .timechip span{position:absolute; top:-6px; right:-6px; min-width:18px; height:18px; border-radius:9px; background:var(--neg); color:#2a0d0a; font:700 11px/18px var(--sans)}
@@ -107,6 +108,7 @@ button:disabled{cursor:not-allowed}
 .bet b{font-weight:500; padding:0 7px; border-radius:999px; background:rgba(0,0,0,.5); line-height:18px}
 .bet.off{visibility:hidden}
 .bet.r{flex-direction:row-reverse} /* 오른쪽 좌석은 금액을 칩 왼쪽에 → 자기 명패를 가리지 않게 */
+.table:not(.wide) .bet{flex-direction:column; align-items:center; gap:2px} /* 좁은 테이블: 금액을 칩 아래로 → 폭이 절반 */
 /* 칩: Higgsfield 3D 칩 모델을 금액별로 색을 바꾸고 숫자를 새겨 테이블 시점으로 미리 렌더한 스프라이트를 쌓는다 */
 .chipset{display:inline-flex; align-items:flex-end; gap:1px}
 .chips{position:relative; flex:none; width:var(--chip)}
@@ -117,9 +119,10 @@ button:disabled{cursor:not-allowed}
 
 .center{position:absolute; left:50%; top:43%; transform:translate(-50%,-50%); display:grid; justify-items:center; gap:6px; z-index:1}
 .table[data-n="2"] .center{top:46%}
+.table.wide .center{top:41%}
 .board-wrap{position:relative; --cw:clamp(30px, 9.2vw, 46px)}
 .table[data-n="2"] .board-wrap{--cw:clamp(40px, 12vw, 64px)}
-@media (min-width:700px){ .board-wrap{--cw:54px} }
+.table.wide .board-wrap{--cw:54px}
 .slots,.board{display:flex; gap:4px}
 .board{position:absolute; inset:0}
 .slot{width:var(--cw); aspect-ratio:5/7; border-radius:calc(var(--cw) * .1); border:1px dashed rgba(244,237,220,.16)}
@@ -252,7 +255,7 @@ button:disabled{cursor:not-allowed}
 .prof .linkbtn{flex:none; font-size:12px}
 
 /* 로비·결과 모달 */
-.overlay{position:fixed; inset:0; z-index:40; display:grid; place-items:center; padding:24px 16px; background:rgba(12,5,7,.72); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px)}
+.overlay{position:fixed; inset:0; z-index:40; display:grid; place-items:center; padding:24px 16px; background:rgba(12,5,7,.86)}
 .sheet{width:min(420px, 100%); padding:26px 22px; border-radius:20px; background:linear-gradient(180deg, #24120f, #150a0a); border:1px solid var(--brass-dim);
   box-shadow:0 30px 80px rgba(0,0,0,.6); animation:rise .45s cubic-bezier(.2,.9,.3,1) both}
 .sheet h2{margin:0 0 4px; font:28px/1.2 var(--display); font-weight:400; color:var(--brass); text-align:center}
@@ -466,33 +469,36 @@ function sfx(kind, n = 1) {
 }
 const actSound = label => sfx(label === '폴드' ? 'fold' : label === '체크' ? 'check' : 'chip');
 
-// ===== 좌석 배치: [좌석 x, y, 베팅 x, y] (테이블 대비 %). 좌석 0 = 나(아래 가운데, y=100은 아래에 붙임) =====
+// ===== 좌석 배치: [좌석 x, y, 베팅 x, y (테이블 대비 %), 딜러 버튼 자리(명패 기준 l·r·bl·br·tl·tr)]. 좌석 0 = 나(아래 가운데)
+// 폰·태블릿·PC 폭별로 카드·명패·시계·서로와의 겹침을 재서 고른 값 =====
 const LAYOUT = {
-  p: { // 세로(폰)
-    2: [[50, 97, 25, 74], [50, 12, 50, 31]], // 헤즈업: 내 베팅은 카드 왼쪽 옆 (액션 글씨와 겹치지 않게)
-    6: [[50, 97, 50, 64], [10, 66, 26, 60], [10, 27, 26, 32], [50, 10, 50, 21], [90, 27, 74, 32], [90, 66, 74, 60]],
-    9: [[50, 97, 50, 64], [10, 76, 25, 70], [8, 54, 22, 58], [10, 30, 24, 34], [31, 10, 34, 21], [69, 10, 66, 21], [90, 30, 76, 34], [92, 54, 78, 58], [90, 76, 75, 70]],
-  },
-  l: { // 가로(태블릿·PC)
-    2: [[50, 97, 50, 66], [50, 12, 50, 30]],
-    6: [[50, 97, 50, 66], [14, 70, 28, 63], [14, 28, 28, 37], [50, 10, 50, 25], [86, 28, 72, 37], [86, 70, 72, 63]],
-    9: [[50, 97, 50, 66], [26, 84, 33, 69], [8, 60, 21, 58], [11, 28, 25, 37], [36, 10, 38, 24], [64, 10, 62, 24], [89, 28, 75, 37], [92, 60, 79, 58], [74, 84, 67, 69]],
-  },
+  p: { 2: [[50, 97, 38, 66, 'l'], [50, 12, 28, 28, 'l']],
+       6: [[50, 97, 50, 64, 'l'], [10, 66, 30, 62, 'br'], [10, 27, 32, 24, 'br'], [50, 10, 28, 10, 'r'], [90, 27, 68, 24, 'bl'], [90, 66, 70, 62, 'bl']],
+       9: [[50, 97, 50, 64, 'l'], [10, 76, 30, 64, 'r'], [8, 54, 30, 32, 'r'], [10, 30, 40, 22, 'tr'], [31, 10, 12, 6, 'r'], [69, 10, 88, 6, 'l'], [90, 30, 60, 22, 'tl'], [92, 54, 70, 32, 'l'], [90, 76, 70, 64, 'l']] },
+  l: { 2: [[50, 97, 42, 64, 'l'], [50, 12, 36, 24, 'l']],
+       6: [[50, 97, 30, 70, 'l'], [14, 70, 28, 60, 'l'], [14, 28, 28, 28, 'l'], [50, 10, 36, 14, 'r'], [86, 28, 72, 28, 'r'], [86, 70, 72, 60, 'r']],
+       9: [[50, 97, 42, 64, 'l'], [26, 84, 24, 68, 'l'], [8, 60, 24, 54, 'r'], [11, 28, 26, 28, 'l'], [36, 10, 22, 12, 'r'], [64, 10, 78, 12, 'l'], [89, 28, 74, 28, 'r'], [92, 60, 76, 54, 'l'], [74, 84, 76, 68, 'r']] },
 };
-const orient = () => $('table').clientWidth >= 640 ? 'l' : 'p';
+// 테이블이 넓으면 가로 배치 (.wide로 모양·카드 크기도 함께 바뀐다)
+const orient = () => $('table').classList.contains('wide') ? 'l' : 'p';
+const setWide = () => $('table').classList.toggle('wide', $('table').clientWidth >= 600);
 function placeSeats() {
   if (!G) return;
-  const L = LAYOUT[orient()][G.n];
-  L.forEach(([sx, sy, bx, by], i) => {
+  setWide();
+  LAYOUT[orient()][G.n].forEach(([sx, sy, bx, by], i) => {
     Object.assign($('seat' + i).style, { left: sx + '%', top: sy + '%' });
     Object.assign($('bet' + i).style, { left: bx + '%', top: by + '%' });
-    $('bet' + i).classList.toggle('r', bx > 55);
+    $('bet' + i).classList.toggle('r', bx > 55); // 오른쪽 좌석은 금액을 칩 왼쪽에
   });
   moveDealer();
 }
-function moveDealer() {
-  const [sx, sy, bx, by] = LAYOUT[orient()][G.n][G.button], side = G.button === 0 ? 17 : sx > 55 ? -12 : sx < 45 ? 12 : 16;
-  Object.assign($('dealerBtn').style, { left: (G.button ? sx * 0.3 + bx * 0.7 : sx) + side + '%', top: (G.button ? sy * 0.3 + by * 0.7 : by + 9) + '%' });
+function moveDealer() { // 딜러 버튼: 좌석마다 정한 명패 모서리 (LAYOUT 다섯째 값)
+  const plate = $('seat' + G.button)?.querySelector('.plate');
+  if (!plate) return;
+  const t = $('table').getBoundingClientRect(), p = plate.getBoundingClientRect(), k = LAYOUT[orient()][G.n][G.button][4];
+  const x = k.includes('l') ? p.left - (k.length > 1 ? 6 : 14) : p.right + (k.length > 1 ? 6 : 14);
+  const y = k[0] === 'b' ? p.bottom - 4 : k[0] === 't' ? p.top + 4 : (p.top + p.bottom) / 2;
+  Object.assign($('dealerBtn').style, { left: x - t.left + 'px', top: y - t.top + 'px' });
 }
 function buildTable() {
   const n = G.n;
@@ -502,8 +508,8 @@ function buildTable() {
     const s = document.createElement('div');
     s.className = 'seat ' + (i ? 'ai' : 'me'); s.id = 'seat' + i;
     s.innerHTML = `<div class="hand" id="cards${i}"></div>
-      <div class="plate"><span class="name">${G.names[i]}</span><b class="stack" id="stack${i}"></b><span class="badge" id="badge${i}" hidden></span>
-      ${i ? '' : `<button class="timechip" id="bTime" aria-label="타임칩 사용: 30초 추가"><b>+30초</b><span id="tcN"></span></button>`}</div>
+      <div class="plate"><span class="name">${G.names[i]}</span><b class="stack" id="stack${i}"></b><span class="badge" id="badge${i}" hidden></span></div>
+      ${i ? '' : `<button class="timechip" id="bTime" aria-label="타임칩 사용: 30초 추가"><b>+30초</b><span id="tcN"></span></button>`}
       <div class="info"><span class="say" id="say${i}"></span><span class="hname" id="hname${i}"></span></div>`;
     if (i && n > 2 && bios[i]) s.querySelector('.plate').onclick = () => toggleBio(i);
     $('seats').append(s);
@@ -672,7 +678,7 @@ function render() {
     seat.classList.toggle('out', G.out[i]);
     renderHole(i);
     const bet = $('bet' + i);
-    setChipset(bet.firstElementChild, H.bets[i], i);
+    setChipset(bet.firstElementChild, H.bets[i], i, 2); // 좌석 베팅은 더미 2개까지 (폭을 줄여 주변을 가리지 않게)
     bet.lastElementChild.textContent = fmt(H.bets[i]);
     bet.classList.toggle('off', !H.bets[i]);
   }
@@ -934,7 +940,7 @@ async function startHand(fresh = false) {
   $('board').textContent = ''; $('board')._cards = [];
   log(`핸드 #${G.hand} · 딜러 버튼 ${who(G.button)}`, 'head');
   phase = 'deal'; dealing = true;
-  moveDealer(); render();
+  render(); moveDealer();
   if (up) {
     const [sb, bb] = LEVELS[G.level];
     flashBanner(`블라인드 상승`, `레벨 ${G.level + 1} · ${fmt(sb)}/${fmt(bb)}`);

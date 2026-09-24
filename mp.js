@@ -44,7 +44,7 @@ function mpNick(code) {
     try { const r = await mpCall('profile', { nickname: $('mpNick').value }); code ? mpJoin(code) : mpMenu(r.nickname); }
     catch (e) { sheetErr(e.message); }
   };
-  $('mpNickOk').onclick = go; $('mpNick').onkeydown = e => e.key === 'Enter' && go(); $('mpNick').focus();
+  $('mpNickOk').onclick = go; $('mpNick').onkeydown = e => e.key === 'Enter' && go(); if (matchMedia('(pointer: fine)').matches) $('mpNick').focus(); // iOS는 자동 포커스하면 탭해도 키보드가 안 뜬다
 }
 function mpMenu(nick) {
   sheet(`<h2>친구와 치기</h2><p>${nick ? esc(nick) + ' 님, ' : ''}방을 만들거나 코드로 들어가세요. 빈자리는 AI가 채워요</p>
@@ -75,6 +75,9 @@ async function mpWait() {
     if (T.status !== 'waiting') { mpUnsubWait(); return mpEnterGame(); }
     const { data: ps } = await sb.from('table_players').select('seat, user_id, nickname').eq('table_id', MP.id).order('seat');
     MP.host = T.host;
+    const key = JSON.stringify([T, ps]);
+    if (key === MP.waitKey) return; // 바뀐 게 없으면 그대로 (다시 그리면 그 순간의 탭이 사라진다)
+    MP.waitKey = key;
     sheet(`<h2>대기실</h2><p>코드 <b class="mp-code">${MP.code}</b> · ${ps.length}/${T.seats}명</p>
       <div class="mp-link"><input class="mp-input" readonly value="${esc(link)}"><button class="btn" id="mpCopy">링크 복사</button></div>
       <ol class="standings">${Array.from({ length: T.seats }, (_, s) => { const p = ps.find(x => x.seat === s);
@@ -92,7 +95,7 @@ async function mpWait() {
   MP.waitPoll = setInterval(draw, 4000); // 실시간이 끊겨도 따라오게
   draw();
 }
-function mpUnsubWait() { if (MP.waitCh) sb.removeChannel(MP.waitCh); MP.waitCh = null; clearInterval(MP.waitPoll); }
+function mpUnsubWait() { if (MP.waitCh) sb.removeChannel(MP.waitCh); MP.waitCh = null; clearInterval(MP.waitPoll); MP.waitKey = null; }
 function mpClose() { mpUnsubWait(); $('mpSheet').hidden = true; showLobby(); }
 
 // ===== 게임 =====
@@ -222,7 +225,7 @@ async function mpApply(e) {
       for (let i = 0; i < G.n; i++) { say(i, G.sitOut[i] ? '자리 비움' : ''); $('hname' + i).textContent = ''; $('seat' + i).classList.remove('win'); }
       $('board').textContent = ''; $('board')._cards = [];
       log(`핸드 #${G.hand} · 딜러 버튼 ${who(G.button)}`, 'head');
-      phase = 'deal'; dealing = true; moveDealer(); render();
+      phase = 'deal'; dealing = true; render(); moveDealer();
       if (levelUp) { const [sbl, bbl] = LEVELS[G.level]; flashBanner('블라인드 상승', `레벨 ${G.level + 1} · ${fmt(sbl)}/${fmt(bbl)}`); log(`블라인드 상승 → ${fmt(sbl)}/${fmt(bbl)}`, 'level'); sfx('level'); }
       say(H.sbSeat, 'SB ' + fmt(H.bets[H.sbSeat])); say(H.bbSeat, 'BB ' + fmt(H.bets[H.bbSeat]));
       await dealAnim(); dealing = false;
