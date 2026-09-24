@@ -268,6 +268,13 @@ button:disabled{cursor:not-allowed}
 .standings li.me{background:rgba(205,166,94,.14); color:var(--text); font-weight:600}
 .standings li span:first-child{color:var(--brass); font-family:var(--mono)}
 .row{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+#bAgain[hidden] + #bToLobby{grid-column:1 / -1}
+.mp-input{width:100%; min-height:48px; padding:0 14px; border-radius:12px; border:1px solid var(--brass-dim); background:rgba(0,0,0,.35); color:var(--text); font:16px var(--sans)}
+.mp-seats{display:grid; gap:8px; margin-bottom:12px}
+.mp-join,.mp-link{display:grid; grid-template-columns:1fr auto; gap:8px; margin-bottom:10px}
+.mp-err{min-height:20px; margin:6px 0; color:var(--neg); font-size:13px; text-align:center}
+.mp-code{font:24px var(--mono); letter-spacing:.12em; color:var(--brass)}
+#mpBody .standings{margin-top:10px}
 
 @keyframes deal{from{opacity:0; transform:translateY(-26px) rotate(-8deg) scale(.92)}}
 @keyframes flip{from{transform:perspective(600px) rotateY(90deg)}}
@@ -325,6 +332,7 @@ button:disabled{cursor:not-allowed}
         </div>
       </div>
       <button class="btn primary wide" id="bNext" hidden>다음 핸드</button>
+      <button class="btn wide" id="bBack" hidden>자리 비움 중 · 복귀하기</button>
     </div>
   </section>
 
@@ -362,9 +370,11 @@ button:disabled{cursor:not-allowed}
       <button class="mode" data-mode="ft6"><b>파이널 테이블 6인</b><span>무작위 페르소나 AI 5명 · 토너먼트</span><em id="lr-ft6"></em></button>
       <button class="mode" data-mode="ft9"><b>파이널 테이블 9인</b><span>무작위 페르소나 AI 8명 · 토너먼트</span><em id="lr-ft9"></em></button>
     </div>
+    <button class="mode" id="mpBtn" hidden style="margin-top:10px; width:100%"><b>친구와 치기</b><span>방을 만들고 링크로 친구를 불러요 · 빈자리는 AI</span></button>
     <button class="btn wide install" hidden style="margin-top:14px">앱으로 설치하기</button>
   </div>
 </div>
+<div class="overlay" id="mpSheet" hidden><div class="sheet" id="mpBody"></div></div>
 <div class="overlay" id="endModal" hidden>
   <div class="sheet">
     <h2 id="endTitle"></h2>
@@ -382,7 +392,8 @@ button:disabled{cursor:not-allowed}
 const $ = id => document.getElementById(id);
 const Q = new URLSearchParams(location.search), FAST = Q.has('fast'); // ?fast=1: 확인용으로 연출을 빠르게
 const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const T = ms => FAST ? Math.round(ms * 0.05) : calm ? Math.round(ms * 0.35) : ms;
+let INSTANT = false; // 멀티에서 화면이 가려졌거나 밀린 이벤트를 따라잡을 때: 연출 없이 바로 적용
+const T = ms => INSTANT ? 0 : FAST ? Math.round(ms * 0.05) : calm ? Math.round(ms * 0.35) : ms;
 const sleep = ms => new Promise(r => setTimeout(r, T(ms)));
 const pct = x => (x * 100).toFixed(1) + '%';
 const STREET = { 0: '프리플랍', 3: '플랍', 4: '턴', 5: '리버' };
@@ -494,7 +505,7 @@ function buildTable() {
       <div class="plate"><span class="name">${G.names[i]}</span><b class="stack" id="stack${i}"></b><span class="badge" id="badge${i}" hidden></span>
       ${i ? '' : `<button class="timechip" id="bTime" aria-label="타임칩 사용: 30초 추가"><b>+30초</b><span id="tcN"></span></button>`}</div>
       <div class="info"><span class="say" id="say${i}"></span><span class="hname" id="hname${i}"></span></div>`;
-    if (i && n > 2) s.querySelector('.plate').onclick = () => toggleBio(i);
+    if (i && n > 2 && bios[i]) s.querySelector('.plate').onclick = () => toggleBio(i);
     $('seats').append(s);
     const b = document.createElement('div');
     b.className = 'bet off'; b.id = 'bet' + i; b.innerHTML = '<span class="chipset"></span><b></b>';
@@ -565,6 +576,7 @@ function setChipset(el, amt, seed, maxStacks = 3, per = 8) {
 // ===== 애니메이션 도구: 화면 위 레이어에서 A → B로 날린다 =====
 function centerOf(el) { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height }; }
 function fly(node, from, to, { dur = 420, rot = 0, fade = false, delay = 0, scale = 1 } = {}) {
+  if (INSTANT) return Promise.resolve();
   node.classList.add('flyer'); $('fx').append(node);
   node.style.setProperty('--chip', getComputedStyle($('table')).getPropertyValue('--chip')); // 테이블 밖 레이어라 칩 크기 변수를 넘겨준다
   const w = node.offsetWidth, h = node.offsetHeight;
@@ -655,7 +667,7 @@ function render() {
     const st = $('stack' + i);
     if (st._v !== G.stacks[i] && !st._anim) { st._v = G.stacks[i]; st.textContent = fmt(G.stacks[i]); }
     const seat = $('seat' + i);
-    seat.classList.toggle('turn', H.toAct === i && (phase === 'player' || phase === 'ai'));
+    seat.classList.toggle('turn', H.toAct === i && (phase === 'player' || phase === 'ai' || phase === 'wait'));
     seat.classList.toggle('folded', H.folded[i] && !G.out[i]);
     seat.classList.toggle('out', G.out[i]);
     renderHole(i);
@@ -685,6 +697,8 @@ function renderControls() {
   const over = !!H.result || phase === 'over';
   $('actions').hidden = over || G.out[0];
   $('bNext').hidden = !over || phase === 'over';
+  $('bNext').disabled = mode === 'mp'; // 멀티는 서버가 다음 핸드를 연다
+  $('bBack').hidden = !(mode === 'mp' && G.sitOut && G.sitOut[0] && !G.out[0]);
   if (over) return;
   const on = phase === 'player', L = legal(0);
   $('bFold').disabled = !on || L.canCheck;
@@ -732,9 +746,9 @@ function renderBlinds() {
 
 // ===== 샷클락(디지털 카운트다운)과 타임칩 =====
 let clock = null;
-function startClock() {
+function startClock(ms = SHOT_CLOCK * 1000) {
   stopClock();
-  clock = { deadline: performance.now() + SHOT_CLOCK * 1000, last: SHOT_CLOCK + 1, iv: setInterval(tickClock, 200) };
+  clock = { deadline: performance.now() + ms, last: SHOT_CLOCK + 1, iv: setInterval(tickClock, 200) };
   $('clock').classList.add('on');
   tickClock();
 }
@@ -745,12 +759,14 @@ function tickClock() {
     clock.last = left;
     $('clock').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
     $('clock').classList.toggle('hurry', left <= 5);
-    if (left <= 5 && left > 0) sfx('tick');
+    if (left <= 5 && left > 0 && (mode !== 'mp' || H.toAct === 0)) sfx('tick');
   }
+  if (left <= 0 && mode === 'mp') { stopClock(); return; } // 멀티: 서버가 시각을 확인하고 처리
   if (left <= 0) { stopClock(); log('시간 초과 · 자동 ' + (legal(0).canCheck ? '체크' : '폴드'), 'level'); playerAct(legal(0).canCheck ? 'check' : 'fold'); }
 }
 function stopClock() { if (clock) clearInterval(clock.iv); clock = null; $('clock').classList.remove('on', 'hurry'); }
 function useTimeChip() {
+  if (mode === 'mp') return mpTimeChip();
   if (!clock || !G.timeChips) return;
   G.timeChips--; clock.deadline += TIME_CHIP_SEC * 1000; clock.last = -1; tickClock();
   sfx('chip'); log(`타임칩 사용 · +${TIME_CHIP_SEC}초 (남은 타임칩 ${G.timeChips}개)`, 'street');
@@ -846,6 +862,7 @@ async function advance() {
   }
 }
 async function playerAct(type, to) {
+  if (mode === 'mp') return mpAct(type, to);
   if (phase !== 'player') return;
   const me = run;
   stopClock(); phase = 'busy';
@@ -904,6 +921,7 @@ function autoNext(sec) { // 다음 핸드는 잠시 뒤 자동으로 (버튼을 
   tick();
 }
 async function startHand(fresh = false) {
+  if (mode === 'mp') return;
   clearInterval(nextTimer);
   if (!fresh && phase !== 'end') return; // 핸드가 끝난 뒤에만 다음 핸드 (중복 시작 방지)
   const me = run;
@@ -967,6 +985,7 @@ function endTournament(won) {
   if (n > 2) $('endSub').textContent += ' · 상대 성향 공개';
   const rows = G.names.map((nm, i) => ({ i, nm, place: G.place[i] })).sort((a, b) => (a.place ?? 0) - (b.place ?? 0));
   $('standings').innerHTML = rows.map(r => `<li class="${r.i ? '' : 'me'}"><span>${r.place ? r.place + '위' : '진행 중'}</span><span>${r.nm}${r.i && n > 2 ? ` · ${G.styles[r.i].tag}` : ''}</span><span>${r.place ? '' : fmt(G.stacks[r.i]) + '칩'}</span></li>`).join('');
+  $('bAgain').hidden = false;
   $('endModal').hidden = false;
   sfx(won ? 'win' : 'lose');
   if (won) chipRain();
@@ -981,6 +1000,7 @@ function chipRain() { // 우승 축하: 칩이 쏟아진다
   }
 }
 function showLobby() {
+  if (mode === 'mp') mpLeave();
   run++; stopClock(); clearInterval(nextTimer); clearInterval(tourTimer); phase = 'lobby';
   $('endModal').hidden = true; $('lobby').hidden = false;
   $('lr-hu').textContent = REC.games ? `${REC.won}승 ${REC.games - REC.won}패` : '';
@@ -1060,7 +1080,19 @@ document.querySelectorAll('.install').forEach(b => b.onclick = async () => {
 });
 addEventListener('appinstalled', () => { showInstall(false); log('앱으로 설치했어요', 'level'); });
 
+// ===== 친구와 치기: 필요할 때만 Supabase 라이브러리와 mp.js를 불러온다 (claude.ai 안에서는 외부 접속이 막혀 숨긴다) =====
+const MP_OK = !/claude/.test(location.hostname) && location.protocol !== 'file:';
+const loadScript = src => new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => no(new Error('불러오지 못했어요: ' + src)); document.head.append(s); });
+async function loadMP() {
+  if (!window.supabase) await loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.min.js');
+  if (typeof mpOpen !== 'function') await loadScript('mp.js');
+}
+$('mpBtn').hidden = !MP_OK;
+$('mpBtn').onclick = () => loadMP().then(() => mpOpen()).catch(e => log(e.message, 'level'));
+$('bBack').onclick = () => mpBack();
+
 renderSound(); renderRecord(); renderProfile(); showLobby();
+if (MP_OK && Q.has('room')) loadMP().then(() => mpOpen(Q.get('room'))).catch(() => {}); // 초대 링크로 들어오면 바로 참가
 if (Q.has('mode')) start(Q.get('mode')); // 확인용: ?mode=ft6 로 바로 시작
 if (Q.has('test')) {
   const t = selfTest();
