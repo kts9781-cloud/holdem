@@ -6,18 +6,19 @@
 <title>헤즈업 홀덤</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
 :root{
   --room:#170b0e; --room-2:#35141c;
   --felt:#0f4a3f; --felt-hi:#1a6852; --felt-deep:#082a23;
   --rail:#2a1611; --brass:#cda65e; --brass-dim:rgba(205,166,94,.32);
   --ivory:#f4eddc; --ink:#1c1714; --red:#b2261d;
-  --signal:#86e3c8; --signal-dim:rgba(134,227,200,.22); --neg:#ec7466;
+  --signal:#86e3c8; --signal-dim:rgba(134,227,200,.22); --neg:#ec7466; --led:#ff5a3c;
   --text:#f1e7d6; --muted:#bfae98;
   --display:"DM Serif Display", Georgia, "Times New Roman", serif;
   --sans:"IBM Plex Sans KR", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   --mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --digital:"Share Tech Mono", "IBM Plex Mono", ui-monospace, monospace;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
@@ -39,16 +40,16 @@ button:disabled{cursor:not-allowed}
 .top h1 .spade{color:var(--brass); margin-right:6px}
 .top h1 small{font-weight:400; color:var(--muted); font-size:13px; margin-left:8px; letter-spacing:0}
 .top .meta{font:13px var(--mono); color:var(--muted); display:flex; flex-wrap:wrap; gap:4px 14px}
-.top .sound{padding:0; border:0; background:none; font:inherit; color:var(--muted); text-decoration:underline; text-underline-offset:3px}
-.top .sound[aria-pressed="false"]{opacity:.55}
+.linkbtn{padding:0; border:0; background:none; font:inherit; color:var(--muted); text-decoration:underline; text-underline-offset:3px}
+.linkbtn[aria-pressed="false"]{opacity:.55}
+.linkbtn.warn{color:var(--neg)}
 #blinds.bump{animation:pop .4s ease-out; color:var(--brass)}
 
 .layout{max-width:1160px; margin:0 auto; padding:0 16px 40px; display:grid; gap:22px}
 @media (min-width:880px){ .layout{grid-template-columns:minmax(0,1fr) 340px; align-items:start} }
 
-/* 테이블 */
-.table{position:relative; isolation:isolate; display:grid; justify-items:center; gap:10px;
-  margin:12px; padding:26px 12px;
+/* ===== 테이블: 좌석을 둘레에 배치 ===== */
+.table{position:relative; isolation:isolate; margin:14px 12px 18px; aspect-ratio:3/4; --chip:24px;
   border-radius:clamp(56px, 16vw, 190px);
   /* 실제 울 펠트 사진 (Higgsfield 생성) 위에 천장 조명처럼 가운데를 밝히고 가장자리를 어둡게 */
   background:radial-gradient(ellipse 60% 50% at 50% 45%, rgba(120,230,190,.16), transparent 70%),
@@ -56,42 +57,88 @@ button:disabled{cursor:not-allowed}
     url("assets/felt.jpg") center / cover, var(--felt);
   box-shadow:0 0 0 10px var(--rail), 0 0 0 11px var(--brass-dim), 0 0 0 13px #120806, 0 28px 60px rgba(0,0,0,.55), inset 0 0 70px rgba(0,0,0,.5)}
 .table::before{content:""; position:absolute; inset:12px; z-index:-1; border-radius:inherit; border:1px solid rgba(205,166,94,.2); pointer-events:none}
+@media (min-width:700px){ .table{aspect-ratio:16/10; --chip:28px} .table[data-n="2"]{aspect-ratio:16/11} }
 
-.seat{display:flex; flex-direction:column; align-items:center; gap:8px}
-.seat.me{flex-direction:column-reverse}
-.plate{display:flex; align-items:center; gap:10px; padding:5px 14px 5px 12px; border-radius:999px; background:rgba(8,18,15,.6); border:1px solid var(--brass-dim); transition:box-shadow .3s}
-.plate .name{font-weight:600; font-size:14px}
-.plate .stack{font:20px/1 var(--display); color:var(--ivory)}
-.dealer{width:22px; height:22px; border-radius:50%; background:var(--ivory); color:var(--ink); font:13px/22px var(--display); text-align:center; box-shadow:0 2px 4px rgba(0,0,0,.4)}
-.seat.turn .plate{box-shadow:0 0 0 2px var(--brass), 0 0 22px rgba(205,166,94,.45)}
-.seat.ai.turn .plate{box-shadow:0 0 0 2px var(--signal), 0 0 22px rgba(134,227,200,.4)}
-.hand{display:flex; gap:6px; --cw:clamp(50px, 14.5vw, 74px); min-height:calc(var(--cw) * 1.4)}
-.info{display:flex; gap:10px; min-height:20px; font-size:13px; line-height:20px}
-.say{color:var(--ivory); font-weight:500}
+.seat{position:absolute; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; gap:3px; width:max-content; z-index:2}
+.seat.me{transform:translate(-50%,-100%); gap:6px}
+.seat.me .info{order:-1} /* 나: 액션 → 카드 → 명패 */
+.plate{position:relative; display:flex; flex-direction:column; align-items:center; min-width:74px; padding:3px 10px 4px; border-radius:12px;
+  background:rgba(8,18,15,.78); border:1px solid var(--brass-dim); transition:box-shadow .3s, opacity .3s; line-height:1.2}
+.plate .name{font-weight:600; font-size:12px; white-space:nowrap}
+.plate .name em{font-style:normal; font-weight:500; font-size:10px; color:var(--brass); margin-left:4px}
+.plate .stack{font:16px/1.1 var(--display); color:var(--ivory); font-weight:400}
+.seat.me .plate{flex-direction:row; gap:10px; padding:5px 14px; border-radius:999px}
+.seat.me .plate .name{font-size:14px}
+.seat.me .plate .stack{font-size:20px}
+.table[data-n="2"] .seat.ai .plate{flex-direction:row; gap:10px; padding:5px 14px; border-radius:999px}
+.table[data-n="2"] .seat.ai .plate .name{font-size:14px}
+.table[data-n="2"] .seat.ai .plate .stack{font-size:20px}
+.seat.turn .plate{box-shadow:0 0 0 2px var(--brass), 0 0 22px rgba(205,166,94,.5)}
+.seat.ai.turn .plate{box-shadow:0 0 0 2px var(--signal), 0 0 22px rgba(134,227,200,.45)}
+.seat.win .plate{box-shadow:0 0 0 2px var(--brass), 0 0 30px rgba(205,166,94,.7)}
+.seat.folded .plate{opacity:.55}
+.seat.out{filter:grayscale(1) brightness(.5)}
+.badge{position:absolute; top:-10px; right:-10px; padding:1px 8px; border-radius:999px; background:var(--neg); color:#2a0d0a; font:700 12px/18px var(--sans); animation:stamp .5s cubic-bezier(.2,1.6,.4,1) both; filter:none}
+.hand{display:flex; gap:3px; --cw:26px; min-height:calc(var(--cw) * 1.4)}
+.seat.ai .hand{margin-bottom:-12px; z-index:-1}
+.seat.me .hand{--cw:clamp(44px, 12vw, 60px); gap:6px}
+.table[data-n="2"] .seat.ai .hand{--cw:42px; gap:5px; margin-bottom:0}
+@media (min-width:700px){ .hand{--cw:34px} .seat.me .hand{--cw:66px} }
+.info{display:flex; gap:8px; min-height:18px; font-size:12px; line-height:18px; white-space:nowrap}
+.say{color:var(--ivory); font-weight:500; text-shadow:0 1px 3px rgba(0,0,0,.7)}
 .say.pop{animation:pop .3s ease-out}
-.hname{color:var(--brass)}
+.hname{color:var(--brass); text-shadow:0 1px 3px rgba(0,0,0,.7)}
+.bio{position:absolute; top:calc(100% + 4px); left:50%; transform:translateX(-50%); width:180px; padding:8px 10px; border-radius:10px; z-index:9;
+  background:rgba(8,12,11,.95); border:1px solid var(--brass-dim); font-size:12px; line-height:1.5; color:var(--muted); white-space:normal; animation:pop .2s ease-out}
+.bio b{display:block; color:var(--text); font-size:13px}
 
-.bet{display:inline-flex; align-items:center; gap:6px; padding:2px 10px 2px 5px; border-radius:999px; background:rgba(0,0,0,.35); font:13px var(--mono)}
-.bet::before{content:""; width:14px; height:14px; border-radius:50%; background:var(--brass); box-shadow:inset 0 0 0 2px #8a6a31, inset 0 0 0 4px var(--ivory)}
+.timechip{position:absolute; right:-54px; bottom:4px; width:44px; height:44px; border-radius:50%; border:0; padding:0;
+  background:radial-gradient(circle, #f2e8d2 0 40%, transparent 41%), repeating-conic-gradient(var(--brass) 0 20deg, #7a5a1e 20deg 40deg);
+  box-shadow:0 3px 8px rgba(0,0,0,.5), inset 0 0 0 3px rgba(0,0,0,.25); color:#3a2608; font:700 11px/1 var(--sans)}
+.timechip span{position:absolute; top:-6px; right:-6px; min-width:18px; height:18px; border-radius:9px; background:var(--neg); color:#2a0d0a; font:700 11px/18px var(--sans)}
+.timechip:disabled{filter:grayscale(.8) brightness(.6)}
+
+.bet{position:absolute; transform:translate(-50%,-50%); display:inline-flex; align-items:flex-end; gap:5px; font:12px var(--mono); z-index:1}
+.bet b{font-weight:500; padding:0 7px; border-radius:999px; background:rgba(0,0,0,.5); line-height:18px}
 .bet.off{visibility:hidden}
+.bet.r{flex-direction:row-reverse} /* 오른쪽 좌석은 금액을 칩 왼쪽에 → 자기 명패를 가리지 않게 */
+/* 칩: Higgsfield 3D 칩 모델을 금액별로 색을 바꾸고 숫자를 새겨 테이블 시점으로 미리 렌더한 스프라이트를 쌓는다 */
+.chipset{display:inline-flex; align-items:flex-end; gap:1px}
+.chips{position:relative; flex:none; width:var(--chip)}
+.chips img{position:absolute; width:var(--chip); filter:drop-shadow(0 2px 2px rgba(0,0,0,.45))}
 
-.center{display:grid; justify-items:center; gap:10px; padding:4px 0; min-height:calc(clamp(42px, 12.4vw, 66px) * 1.4 + 62px)}
-.board-wrap{position:relative; --cw:clamp(42px, 12.4vw, 66px)}
-.slots,.board{display:flex; gap:6px}
+.dealer-btn{position:absolute; width:22px; height:22px; margin:-11px 0 0 -11px; border-radius:50%; background:var(--ivory); color:var(--ink); z-index:3;
+  font:13px/22px var(--display); text-align:center; box-shadow:0 2px 5px rgba(0,0,0,.5); transition:left .6s cubic-bezier(.3,.8,.3,1), top .6s cubic-bezier(.3,.8,.3,1)}
+
+.center{position:absolute; left:50%; top:43%; transform:translate(-50%,-50%); display:grid; justify-items:center; gap:6px; z-index:1}
+.table[data-n="2"] .center{top:46%}
+.board-wrap{position:relative; --cw:clamp(30px, 9.2vw, 46px)}
+.table[data-n="2"] .board-wrap{--cw:clamp(40px, 12vw, 64px)}
+@media (min-width:700px){ .board-wrap{--cw:54px} }
+.slots,.board{display:flex; gap:4px}
 .board{position:absolute; inset:0}
 .slot{width:var(--cw); aspect-ratio:5/7; border-radius:calc(var(--cw) * .1); border:1px dashed rgba(244,237,220,.16)}
-.pot{display:flex; align-items:baseline; gap:8px; font-size:13px; color:var(--muted)}
-.pot b{font:26px/1 var(--display); font-weight:400; color:var(--brass)}
-.banner{text-align:center; animation:pop .35s ease-out}
-.banner strong{display:block; font-size:22px; line-height:1.2; font-weight:700}
-.banner span{font:13px var(--mono); color:var(--muted)}
+.pot{display:flex; align-items:flex-end; gap:6px; font-size:12px; line-height:22px; color:var(--muted); min-height:30px}
+.pot b{font:22px/1 var(--display); font-weight:400; color:var(--brass)}
+.banner{text-align:center; animation:pop .35s ease-out; max-width:240px}
+.banner strong{display:block; font-size:18px; line-height:1.25; font-weight:700}
+.banner span{font:12px var(--mono); color:var(--muted)}
 .banner.win strong{color:var(--brass)}
 .banner.lose strong{color:var(--neg)}
+/* 디지털 샷클락 */
+.clock{font:26px/1 var(--digital); letter-spacing:.06em; color:#ffd9a0; padding:3px 10px 2px; border-radius:6px; background:rgba(0,0,0,.55);
+  box-shadow:inset 0 0 0 1px rgba(255,200,120,.25); text-shadow:0 0 8px rgba(255,190,90,.8); visibility:hidden}
+.clock.on{visibility:visible}
+.clock.hurry{color:#ffb3a6; text-shadow:0 0 10px var(--led), 0 0 2px var(--led); animation:blink 1s steps(2) infinite}
+.level-banner{position:absolute; left:50%; top:20%; transform:translate(-50%,-50%); z-index:6; padding:8px 18px; border-radius:12px; text-align:center;
+  background:rgba(20,10,6,.92); border:1px solid var(--brass); color:var(--brass); font:700 15px/1.4 var(--sans); white-space:nowrap; animation:banner 2.4s ease both}
+.level-banner small{display:block; font:12px var(--mono); color:var(--muted)}
+#deck{position:absolute; left:50%; top:4%; width:1px; height:1px}
 
 /* 카드 */
 .card{position:relative; flex:none; width:var(--cw); aspect-ratio:5/7; border-radius:calc(var(--cw) * .1);
   background:linear-gradient(165deg, #fffaf0, var(--ivory) 55%, #e4d9c0); color:var(--ink);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.6), 0 6px 14px rgba(0,0,0,.4);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.6), 0 4px 10px rgba(0,0,0,.4);
   font-family:var(--display); transition:transform .25s, filter .25s, box-shadow .25s}
 .card.red{color:var(--red)}
 .card .idx{position:absolute; top:5%; left:9%; display:flex; flex-direction:column; align-items:center; font-size:calc(var(--cw) * .36); line-height:.95; letter-spacing:-.04em}
@@ -100,14 +147,17 @@ button:disabled{cursor:not-allowed}
 .card.back{background:
   repeating-linear-gradient(45deg, rgba(205,166,94,.28) 0 1px, transparent 1px 7px),
   repeating-linear-gradient(-45deg, rgba(205,166,94,.28) 0 1px, transparent 1px 7px), #5c1823;
-  box-shadow:inset 0 0 0 3px var(--ivory), inset 0 0 0 4px var(--brass), 0 6px 14px rgba(0,0,0,.4)}
+  box-shadow:inset 0 0 0 2px var(--ivory), inset 0 0 0 3px var(--brass), 0 4px 10px rgba(0,0,0,.4)}
+.card.undealt{visibility:hidden}
 .card.deal{animation:deal .38s cubic-bezier(.2,.9,.25,1) both}
-.card.flip{animation:flip .4s ease-out both}
-.card.win{transform:translateY(-6px); box-shadow:0 0 0 2px var(--brass), 0 12px 22px rgba(0,0,0,.5)}
+.card.flip{animation:flip .45s ease-out both}
+.card.win{transform:translateY(-5px); box-shadow:0 0 0 2px var(--brass), 0 10px 20px rgba(0,0,0,.5)}
 .card.dim{filter:brightness(.5) saturate(.5)}
+#fx{position:fixed; inset:0; pointer-events:none; z-index:60; overflow:hidden}
+.flyer{position:fixed; left:0; top:0; will-change:transform}
 
 /* 조작 */
-.controls{margin-top:26px; display:grid; gap:10px}
+.controls{display:grid; gap:10px}
 #actions{display:grid; gap:10px}
 .main{display:grid; grid-template-columns:1fr 1.15fr 1.45fr; gap:8px}
 .btn{min-height:54px; padding:0 10px; border-radius:14px; border:1px solid var(--brass-dim); background:rgba(0,0,0,.28); font-weight:600; font-size:16px; transition:transform .12s, background .2s, opacity .2s}
@@ -117,17 +167,17 @@ button:disabled{cursor:not-allowed}
 .btn.primary:not(:disabled):hover{background:linear-gradient(180deg, #ebc982, #c49a4e)}
 .btn.ghost{background:transparent; color:var(--muted)}
 .btn:disabled{opacity:.36}
+.btn small{display:block; font-size:12px; font-weight:500; opacity:.7}
+.btn.wide{width:100%}
 .sizing{display:grid; gap:8px}
 .presets{display:flex; gap:6px}
 .presets .chip{flex:1; min-width:0; padding:0 4px}
 .fine{display:flex; align-items:center; gap:8px}
-.chip{min-height:40px; padding:0 12px; border-radius:999px; border:1px solid var(--brass-dim); background:transparent; color:var(--muted); font-size:13px; font-variant-numeric:tabular-nums}
+.chip{min-height:42px; padding:0 12px; border-radius:999px; border:1px solid var(--brass-dim); background:transparent; color:var(--muted); font-size:15px; font-weight:500; font-variant-numeric:tabular-nums}
 .chip.on{border-color:var(--brass); background:rgba(205,166,94,.16); color:var(--text)}
 .chip.step{width:44px; padding:0; font-size:18px; line-height:1}
 .chip:disabled{opacity:.36}
 .fine input{flex:1; min-width:0; height:36px; accent-color:var(--brass)}
-.btn small{display:block; font-size:12px; font-weight:500; opacity:.7}
-.btn.wide{width:100%}
 
 /* EV 계기판 */
 .side{display:grid; gap:18px; align-content:start}
@@ -137,6 +187,7 @@ button:disabled{cursor:not-allowed}
 .gauge::before{content:""; position:absolute; inset:0; pointer-events:none; background:repeating-linear-gradient(0deg, rgba(134,227,200,.035) 0 1px, transparent 1px 3px)}
 .g-head{display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap}
 .g-head h2{margin:0; font:600 13px var(--sans); letter-spacing:.08em}
+.g-head h2 span{color:var(--text); font-weight:500; letter-spacing:0; margin-left:6px}
 .state{display:inline-flex; align-items:center; gap:6px; padding:2px 8px; border-radius:999px; border:1px solid var(--signal-dim); font-size:11px}
 .state::before{content:""; width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.45}
 .state.busy::before{opacity:1; animation:blink .6s steps(2) infinite}
@@ -177,7 +228,7 @@ button:disabled{cursor:not-allowed}
 .pick:empty{display:none}
 .pick span{font-family:var(--sans); color:var(--muted)}
 
-/* 기록 */
+/* 전적·기록 */
 .log{padding:14px 16px; border-radius:16px; background:rgba(16,8,10,.62); border:1px solid rgba(205,166,94,.14); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px)}
 .log h2{margin:0 0 8px; font:600 13px var(--sans); letter-spacing:.08em; color:var(--muted)}
 .log ol{list-style:none; margin:0; padding:0; max-height:220px; overflow:auto; font-size:13px}
@@ -193,12 +244,33 @@ button:disabled{cursor:not-allowed}
 .record dd{margin:2px 0 0; font:20px/1.2 var(--display); color:var(--ivory)}
 .record dd small{margin-left:6px; font:12px var(--mono); color:var(--muted)}
 
+/* 로비·결과 모달 */
+.overlay{position:fixed; inset:0; z-index:40; display:grid; place-items:center; padding:24px 16px; background:rgba(12,5,7,.72); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px)}
+.sheet{width:min(420px, 100%); padding:26px 22px; border-radius:20px; background:linear-gradient(180deg, #24120f, #150a0a); border:1px solid var(--brass-dim);
+  box-shadow:0 30px 80px rgba(0,0,0,.6); animation:rise .45s cubic-bezier(.2,.9,.3,1) both}
+.sheet h2{margin:0 0 4px; font:28px/1.2 var(--display); font-weight:400; color:var(--brass); text-align:center}
+.sheet > p{margin:0 0 18px; text-align:center; color:var(--muted); font-size:14px}
+.modes{display:grid; gap:10px}
+.mode{display:grid; gap:2px; text-align:left; padding:14px 16px; border-radius:14px; border:1px solid var(--brass-dim); background:rgba(0,0,0,.25)}
+.mode:hover{background:rgba(205,166,94,.1); border-color:var(--brass)}
+.mode b{font-size:17px}
+.mode span{font-size:13px; color:var(--muted)}
+.mode em{font:normal 12px var(--mono); color:var(--brass)}
+.standings{list-style:none; margin:0 0 18px; padding:0; display:grid; gap:4px; font-size:14px}
+.standings li{display:flex; justify-content:space-between; gap:10px; padding:6px 10px; border-radius:8px; background:rgba(255,255,255,.03)}
+.standings li.me{background:rgba(205,166,94,.14); color:var(--text); font-weight:600}
+.standings li span:first-child{color:var(--brass); font-family:var(--mono)}
+.row{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+
 @keyframes deal{from{opacity:0; transform:translateY(-26px) rotate(-8deg) scale(.92)}}
 @keyframes flip{from{transform:perspective(600px) rotateY(90deg)}}
 @keyframes pop{from{opacity:0; transform:translateY(4px)}}
+@keyframes stamp{from{opacity:0; transform:scale(2.2) rotate(-12deg)}}
+@keyframes banner{0%{opacity:0; transform:translate(-50%,-30%) scale(.9)} 12%,80%{opacity:1; transform:translate(-50%,-50%) scale(1)} 100%{opacity:0; transform:translate(-50%,-60%)}}
+@keyframes rise{from{opacity:0; transform:translateY(24px) scale(.97)}}
 @keyframes grow{from{width:0}}
 @keyframes growx{from{transform:scaleX(0)}}
-@keyframes blink{50%{opacity:.15}}
+@keyframes blink{50%{opacity:.35}}
 @keyframes drift{to{background-position:100% 100%}}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important}
@@ -207,33 +279,26 @@ button:disabled{cursor:not-allowed}
 </head>
 <body>
 <header class="top">
-  <h1><span class="spade">♠&#xFE0E;</span>헤즈업 홀덤<small>노리밋 · vs EV 컴퓨터</small></h1>
-  <div class="meta"><span id="handNo">핸드 #1</span><span id="blinds"></span><button class="sound" id="bSound" aria-pressed="true">소리 끄기</button></div>
+  <h1><span class="spade">♠&#xFE0E;</span><span id="modeName">헤즈업 홀덤</span><small id="modeSub">노리밋 · vs EV 컴퓨터</small></h1>
+  <div class="meta"><span id="handNo"></span><span id="blinds"></span><button class="linkbtn" id="bLobby">로비</button><button class="linkbtn" id="bSound" aria-pressed="true">소리 끄기</button></div>
 </header>
 
 <main class="layout">
   <section>
-    <div class="table">
-      <div class="seat ai" id="seat1">
-        <div class="plate"><span class="name">컴퓨터</span><span class="stack" id="stack1"></span><span class="dealer" id="dealer1" hidden>D</span></div>
-        <div class="hand" id="cards1"></div>
-        <div class="info"><span class="say" id="say1"></span><span class="hname" id="hname1"></span></div>
-      </div>
-      <div class="bet off" id="bet1"></div>
+    <div class="table" id="table">
+      <div id="deck"></div>
+      <div id="bets"></div>
       <div class="center">
+        <div class="clock" id="clock" aria-live="off">0:20</div>
         <div class="board-wrap">
           <div class="slots"><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i></div>
           <div class="board" id="board"></div>
         </div>
-        <div class="pot" id="potBox">팟 <b id="pot">0</b></div>
+        <div class="pot" id="potBox"><span class="chipset" id="pile"></span>팟 <b id="pot">0</b></div>
         <div class="banner" id="banner" aria-live="polite" hidden></div>
       </div>
-      <div class="bet off" id="bet0"></div>
-      <div class="seat me" id="seat0">
-        <div class="plate"><span class="name">나</span><span class="stack" id="stack0"></span><span class="dealer" id="dealer0" hidden>D</span></div>
-        <div class="hand" id="cards0"></div>
-        <div class="info"><span class="say" id="say0"></span><span class="hname" id="hname0"></span></div>
-      </div>
+      <div id="seats"></div>
+      <div class="dealer-btn" id="dealerBtn">D</div>
     </div>
 
     <div class="controls">
@@ -247,7 +312,7 @@ button:disabled{cursor:not-allowed}
           <div class="presets" id="presets"></div>
           <div class="fine">
             <button class="chip step" id="bMinus" aria-label="1BB 줄이기">−</button>
-            <input type="range" id="slider" step="1" aria-label="레이즈 금액">
+            <input type="range" id="slider" step="100" aria-label="레이즈 금액">
             <button class="chip step" id="bPlus" aria-label="1BB 늘리기">+</button>
           </div>
         </div>
@@ -259,7 +324,7 @@ button:disabled{cursor:not-allowed}
   <aside class="side">
     <section class="gauge" id="gauge">
       <div class="g-head">
-        <h2>EV 계기판</h2><span class="state" id="gState">대기</span>
+        <h2>EV 계기판<span id="gWho"></span></h2><span class="state" id="gState">대기</span>
         <label class="toggle"><input type="checkbox" id="cheat">실시간 공개</label>
       </div>
       <div class="secret" id="gBody"></div>
@@ -268,9 +333,9 @@ button:disabled{cursor:not-allowed}
     <section class="log record">
       <h2>전적</h2>
       <dl>
-        <div><dt>게임</dt><dd id="rGames"></dd></div>
-        <div><dt>핸드 승률</dt><dd id="rHands"></dd></div>
-        <div><dt>최대로 딴 팟</dt><dd id="rPot"></dd></div>
+        <div><dt id="rL1">게임</dt><dd id="r1"></dd></div>
+        <div><dt id="rL2">핸드 승률</dt><dd id="r2"></dd></div>
+        <div><dt id="rL3">최대로 딴 팟</dt><dd id="r3"></dd></div>
       </dl>
     </section>
     <section class="log">
@@ -280,18 +345,42 @@ button:disabled{cursor:not-allowed}
   </aside>
 </main>
 
+<div class="overlay" id="lobby">
+  <div class="sheet">
+    <h2>게임 선택</h2>
+    <p>나를 뺀 모든 자리는 각자 우승을 노리는 EV AI예요</p>
+    <div class="modes">
+      <button class="mode" data-mode="hu"><b>헤즈업</b><span>EV 컴퓨터와 1:1 · 각자 20,000칩</span><em id="lr-hu"></em></button>
+      <button class="mode" data-mode="ft6"><b>파이널 테이블 6인</b><span>무작위 페르소나 AI 5명 · 토너먼트</span><em id="lr-ft6"></em></button>
+      <button class="mode" data-mode="ft9"><b>파이널 테이블 9인</b><span>무작위 페르소나 AI 8명 · 토너먼트</span><em id="lr-ft9"></em></button>
+    </div>
+  </div>
+</div>
+<div class="overlay" id="endModal" hidden>
+  <div class="sheet">
+    <h2 id="endTitle"></h2>
+    <p id="endSub"></p>
+    <ol class="standings" id="standings"></ol>
+    <div class="row"><button class="btn primary" id="bAgain">다시 하기</button><button class="btn" id="bToLobby">로비로</button></div>
+  </div>
+</div>
+<div id="fx"></div>
+
 <script id="engine">
-// ===== 엔진: DOM 없음 =====
-const START = 1000, HANDS_PER_LEVEL = 10;
-const LEVELS = [[10, 20], [15, 30], [25, 50], [50, 100], [75, 150], [100, 200], [150, 300], [200, 400], [300, 600], [500, 1000]];
-const levelOf = hand => Math.min(LEVELS.length - 1, Math.floor((hand - 1) / HANDS_PER_LEVEL));
-let ITERS = 2000; // 몬테카를로 반복 횟수 (결정당 최대 2회 실행)
+// ===== 엔진: DOM 없음. 좌석 0 = 나, 나머지 = AI. 헤즈업은 2명인 경우 =====
+let ITERS = 2000; // 몬테카를로 반복 횟수 (상대가 많으면 줄여 쓴다)
+const CHIP = 100; // 가장 작은 칩. 모든 금액은 100 단위
+// 실제 토너먼트처럼 오르는 블라인드
+const LEVELS = [[100, 200], [200, 400], [300, 600], [400, 800], [500, 1000], [600, 1200], [800, 1600], [1000, 2000], [1200, 2400],
+  [1500, 3000], [2000, 4000], [2500, 5000], [3000, 6000], [4000, 8000], [5000, 10000], [6000, 12000], [8000, 16000], [10000, 20000]];
+const levelOf = hand => Math.min(LEVELS.length - 1, Math.floor((hand - 1) / G.hpl));
 const RANKS = '23456789TJQKA', SUITS = 'shdc', SUIT_GLYPH = '♠♥♦♣';
 const rankOf = c => c >> 2, suitOf = c => c & 3;
 const card = s => RANKS.indexOf(s[0]) * 4 + SUITS.indexOf(s[1]);
 const rankLabel = r => r === 8 ? '10' : RANKS[r];
 const cardText = c => rankLabel(rankOf(c)) + SUIT_GLYPH[suitOf(c)];
 const fmt = n => n.toLocaleString('ko-KR');
+const sum = a => a.reduce((s, x) => s + x, 0);
 const HAND_NAMES = ['하이카드', '원페어', '투페어', '트리플', '스트레이트', '플러시', '풀하우스', '포카드', '스트레이트 플러시'];
 
 // 랭크 비트마스크에서 스트레이트 최고 랭크 (없으면 -1). A-5 휠은 3('5') 반환.
@@ -379,157 +468,235 @@ function strengthMap(board, dead) {
 // 아무 패로나 레이즈하는 상대(rr≈1)는 거의 안 좁히고, 골라서 레이즈하는 상대는 크게 좁힌다. 상위 10%보다는 안 좁힌다
 const rangeCut = (aggro, rr) => Math.min(0.9, 1 - rr ** aggro);
 
-// 몬테카를로 승률: 상대 핸드는 레인지(강도표에서 cut 이상)에서, 남은 보드는 무작위로
-function equity(hole, board, cut = 0, map = PCT, iters = ITERS) {
+// 몬테카를로 승률: 상대마다 각자 레인지(강도표에서 cuts[k] 이상)에서 패를 뽑고, 남은 보드는 무작위로. 동점은 나눠 가진다
+// 거절 표본추출은 상대별로 따로 (한꺼번에 거절하면 상대가 많을 때 통과율이 곱으로 줄어든다)
+function equity(hole, board, cuts, map = PCT, iters = ITERS) {
   const dead = new Set([...hole, ...board]), d = [];
   for (let c = 0; c < 52; c++) if (!dead.has(c)) d.push(c);
-  const n = d.length, need = 5 - board.length, me = [...hole, ...board], op = [0, 0, ...board];
+  const n = d.length, need = 5 - board.length, me = [...hole, ...board], opp = cuts.map(() => [0, 0, ...board]);
   const rnd = k => Math.floor(Math.random() * k);
   const swap = (i, j) => { const t = d[i]; d[i] = d[j]; d[j] = t; };
   let won = 0;
   for (let it = 0; it < iters; it++) {
-    let tries = 0;
-    do { swap(0, rnd(n)); swap(1, 1 + rnd(n - 1)); } while (cut > 0 && map[d[0] * 52 + d[1]] < cut && ++tries < 100);
-    for (let k = 0; k < need; k++) swap(2 + k, 2 + k + rnd(n - 2 - k));
-    op[0] = d[0]; op[1] = d[1];
-    const run = d.slice(2, 2 + need), a = evaluate(me.concat(run)), b = evaluate(op.concat(run));
-    won += a > b ? 1 : a === b ? 0.5 : 0;
+    let pos = 0;
+    for (let k = 0; k < cuts.length; k++, pos += 2) {
+      let tries = 0;
+      do { swap(pos, pos + rnd(n - pos)); swap(pos + 1, pos + 1 + rnd(n - pos - 1)); }
+      while (cuts[k] > 0 && map[d[pos] * 52 + d[pos + 1]] < cuts[k] && ++tries < 60);
+      opp[k][0] = d[pos]; opp[k][1] = d[pos + 1];
+    }
+    for (let j = 0; j < need; j++) swap(pos + j, pos + j + rnd(n - pos - j));
+    const run = d.slice(pos, pos + need), mine = evaluate(me.concat(run));
+    let ties = 0, lost = false;
+    for (const o of opp) { const s = evaluate(o.concat(run)); if (s > mine) { lost = true; break; } if (s === mine) ties++; }
+    if (!lost) won += 1 / (ties + 1);
   }
   return won / iters;
 }
 
-// ===== 게임 상태 (0 = 나, 1 = 컴퓨터) =====
+// ===== 게임 상태 =====
 let G, H;
-function newGame() {
+// opts: names[], styles[], stacks[], hpl(레벨당 핸드 수)
+function newGame(o) {
+  const n = o.stacks.length;
   // stats: 베팅을 마주한 횟수, 폴드 횟수, 그때마다의 MDF(최소 방어 빈도) 합, 레이즈할 수 있었던 횟수, 실제 레이즈 횟수
-  G = { stacks: [START, START], button: Math.random() < 0.5 ? 0 : 1, hand: 0, stats: [0, 1].map(() => ({ faced: 0, folded: 0, mdf: 0, chances: 0, raises: 0 })) };
+  G = { n, names: o.names, styles: o.styles, stacks: o.stacks.slice(), out: Array(n).fill(false), place: Array(n).fill(null),
+        hpl: o.hpl, hand: 0, button: Math.floor(Math.random() * n),
+        stats: Array.from({ length: n }, () => ({ faced: 0, folded: 0, mdf: 0, chances: 0, raises: 0 })) };
 }
+const alive = () => G.stacks.map((_, i) => i).filter(i => !G.out[i]);
+const nextOf = (from, ok) => { for (let k = 1; k <= G.n; k++) { const i = (from + k) % G.n; if (ok(i)) return i; } return -1; };
+const live = () => H.folded.map((f, i) => f ? -1 : i).filter(i => i >= 0); // 이번 핸드에서 아직 안 접은 사람
+const maxBet = () => Math.max(...H.bets);
+const needsAction = i => !H.folded[i] && G.stacks[i] > 0 && (!H.acted[i] || H.bets[i] < maxBet());
 function put(p, x) { x = Math.min(x, G.stacks[p]); G.stacks[p] -= x; H.bets[p] += x; H.committed[p] += x; }
+
 function newHand() {
-  if (G.hand) G.button ^= 1;
+  if (G.hand) G.button = nextOf(G.button, i => !G.out[i]);
   G.hand++;
-  const d = [...Array(52).keys()];
+  const n = G.n, [sb, bb] = LEVELS[levelOf(G.hand)], d = [...Array(52).keys()];
   for (let i = 51; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [d[i], d[j]] = [d[j], d[i]]; }
-  const [sb, bb] = LEVELS[levelOf(G.hand)];
-  H = { deck: d, hole: [[d.pop(), d.pop()], [d.pop(), d.pop()]], board: [], bets: [0, 0], committed: [0, 0], bb,
-        acted: [false, false], lastRaise: bb, toAct: G.button, aggro: [0, 0], folded: null, result: null, decision: null };
-  put(G.button, sb); put(1 - G.button, bb); // 헤즈업: 버튼이 스몰 블라인드
+  const z = () => Array(n).fill(0);
+  H = { deck: d, hole: Array.from({ length: n }, () => []), board: [], bets: z(), committed: z(), aggro: z(),
+        folded: G.out.slice(), acted: Array(n).fill(false), canRaise: Array(n).fill(true),
+        lastRaise: bb, sb, bb, start: G.stacks.slice(), result: null, decision: null, busted: [] };
+  for (let r = 0; r < 2; r++) for (let k = 1; k <= n; k++) { const i = (G.button + k) % n; if (!G.out[i]) H.hole[i].push(d.pop()); } // 버튼 왼쪽부터 한 장씩
+  // 헤즈업(2명)이면 버튼이 스몰 블라인드, 아니면 버튼 다음이 SB, 그다음이 BB
+  H.sbSeat = alive().length === 2 ? G.button : nextOf(G.button, i => !G.out[i]);
+  H.bbSeat = nextOf(H.sbSeat, i => !G.out[i]);
+  put(H.sbSeat, sb); put(H.bbSeat, bb);
+  H.toAct = nextOf(H.bbSeat, needsAction); // 프리플랍은 BB 다음 사람부터 (헤즈업이면 버튼=SB)
 }
 function legal(p) {
-  const o = 1 - p, owe = H.bets[o] - H.bets[p];
-  const maxTo = Math.min(H.bets[p] + G.stacks[p], H.bets[o] + G.stacks[o]); // 상대가 못 받는 만큼은 의미 없음
-  return { toCall: Math.min(owe, G.stacks[p]), canCheck: owe === 0, canRaise: maxTo > H.bets[o], minTo: Math.min(H.bets[o] + H.lastRaise, maxTo), maxTo };
+  const mb = maxBet(), owe = mb - H.bets[p];
+  const cap = Math.max(0, ...live().filter(i => i !== p).map(i => H.bets[i] + G.stacks[i])); // 아무도 못 받는 만큼은 의미 없음
+  const maxTo = Math.min(H.bets[p] + G.stacks[p], cap);
+  return { toCall: Math.min(owe, G.stacks[p]), canCheck: owe === 0, canRaise: H.canRaise[p] && maxTo > mb,
+           minTo: Math.min(mb + H.lastRaise, maxTo), maxTo };
 }
-// 헤즈업에서 최소 레이즈보다 작은 레이즈는 항상 올인이라 상대가 다시 레이즈할 수 없다 → 별도 처리 불필요
 function act(p, type, to) {
-  const o = 1 - p, owe = H.bets[o] - H.bets[p], before = G.stacks[p];
-  if (owe > 0) { const P = H.committed[0] + H.committed[1]; G.stats[p].faced++; G.stats[p].mdf += (P - owe) / P; }
-  if (legal(p).canRaise) { G.stats[p].chances++; if (type === 'raise') G.stats[p].raises++; }
-  if (type === 'fold') { G.stats[p].folded++; H.folded = p; return '폴드'; }
+  const mb = maxBet(), owe = mb - H.bets[p], before = G.stacks[p], st = G.stats[p], L = legal(p);
+  if (owe > 0) { const P = sum(H.committed); st.faced++; st.mdf += (P - owe) / P; }
+  if (L.canRaise) { st.chances++; if (type === 'raise') st.raises++; }
   let label;
-  if (type === 'raise') {
-    const L = legal(p), verb = H.bets[o] ? '레이즈' : '베팅';
-    to = Math.max(L.minTo, Math.min(L.maxTo, Math.round(to)));
-    // 공격 강도: ½팟 0.75, 팟 1, 큰 올인은 최대 4 (레인지 상위 32%까지 좁힘)
-    const s = (to - H.bets[o]) / (H.committed[0] + H.committed[1] + owe);
-    H.lastRaise = Math.max(H.lastRaise, to - H.bets[o]);
-    put(p, to - H.bets[p]); H.acted[o] = false; H.aggro[p] += Math.min(4, 0.5 + s / 2);
+  if (type === 'raise' && !L.canRaise) type = 'call'; // 레이즈할 수 없으면 콜로 처리
+  if (type === 'fold') { st.folded++; H.folded[p] = true; label = '폴드'; }
+  else if (type === 'raise') {
+    to = Math.max(L.minTo, Math.min(L.maxTo, Math.round(to / CHIP) * CHIP));
+    const inc = to - mb, full = inc >= H.lastRaise, verb = mb ? '레이즈' : '베팅';
+    const s = inc / (sum(H.committed) + owe); // 공격 강도: 1/2팟 0.75, 팟 1, 큰 올인은 최대 4
+    if (full) H.lastRaise = inc;
+    // 최소 레이즈 이상이면 모두에게 액션이 다시 열리고, 모자란 올인이면 이미 행동한 사람은 콜/폴드만 할 수 있다
+    for (const q of live()) if (q !== p && G.stacks[q] > 0) { if (full) H.canRaise[q] = true; else if (H.acted[q]) H.canRaise[q] = false; H.acted[q] = false; }
+    put(p, to - H.bets[p]); H.aggro[p] += Math.min(4, 0.5 + s / 2);
     label = `${verb} ${fmt(H.bets[p])}`;
-  } else {
-    put(p, owe);
-    label = owe ? `콜 ${fmt(before - G.stacks[p])}` : '체크';
-  }
-  H.acted[p] = true; H.toAct = o;
-  return G.stacks[p] ? label : `올인 · ${label}`;
+  } else { put(p, owe); label = owe ? `콜 ${fmt(before - G.stacks[p])}` : '체크'; }
+  H.acted[p] = true;
+  H.toAct = nextOf(p, needsAction);
+  return type === 'fold' || G.stacks[p] ? label : `올인 · ${label}`;
 }
 function roundOver() {
-  const [a, b] = H.bets;
-  if (a !== b) {
-    const lo = a < b ? 0 : 1, hi = 1 - lo;
-    if (G.stacks[lo] > 0) return false;
-    const ex = H.bets[hi] - H.bets[lo]; // 못 받은 초과분 반환
-    G.stacks[hi] += ex; H.bets[hi] -= ex; H.committed[hi] -= ex;
-    return true;
-  }
-  if (!G.stacks[0] || !G.stacks[1]) return true; // 올인 → 더 이상 베팅 없음
-  return H.acted[0] && H.acted[1];
+  const lv = live();
+  if (lv.length <= 1) return true;
+  const canAct = lv.filter(i => G.stacks[i] > 0);
+  // 칩이 남은 사람이 혼자이고 이미 최고 베팅을 맞췄다면 더 할 베팅이 없다
+  if (lv.some(needsAction) && !(canAct.length === 1 && H.bets[canAct[0]] >= maxBet())) return false;
+  const mb = maxBet(), top = H.bets.indexOf(mb), second = Math.max(0, ...H.bets.filter((_, i) => i !== top));
+  if (mb > second) { const ex = mb - second; G.stacks[top] += ex; H.bets[top] -= ex; H.committed[top] -= ex; } // 아무도 받지 못한 초과분 반환
+  return true;
 }
 function nextStreet() {
-  const n = H.board.length ? 1 : 3;
-  for (let i = 0; i < n; i++) H.board.push(H.deck.pop());
-  H.bets = [0, 0]; H.acted = [false, false]; H.lastRaise = H.bb; H.toAct = 1 - G.button;
+  const k = H.board.length ? 1 : 3;
+  for (let i = 0; i < k; i++) H.board.push(H.deck.pop());
+  H.bets.fill(0); H.acted.fill(false); H.canRaise.fill(true); H.lastRaise = H.bb;
+  H.toAct = nextOf(G.button, needsAction); // 플랍부터는 버튼 다음 사람부터 (헤즈업이면 BB)
 }
+// 정산: 올인 금액 층마다 사이드팟을 나누고 층마다 승자를 가린다. 폴드한 사람이 낸 칩도 팟에 남는다
 function settle() {
-  const pot = H.committed[0] + H.committed[1];
-  let win;
-  if (H.folded !== null) win = [1 - H.folded];
+  const n = G.n, lv = live(), total = sum(H.committed), pots = [];
+  if (lv.length === 1) pots.push({ amt: total, elig: lv });
   else {
-    const s = [0, 1].map(p => evaluate([...H.hole[p], ...H.board]));
-    win = s[0] === s[1] ? [0, 1] : [s[0] > s[1] ? 0 : 1];
+    let prev = 0;
+    for (const L of [...new Set(lv.map(i => H.committed[i]))].sort((a, b) => a - b)) {
+      let amt = 0;
+      for (let i = 0; i < n; i++) amt += Math.max(0, Math.min(H.committed[i], L) - prev);
+      pots.push({ amt, elig: lv.filter(i => H.committed[i] >= L) }); prev = L;
+    }
+    pots[pots.length - 1].amt += total - sum(pots.map(p => p.amt)); // 폴드한 사람이 더 많이 낸 몫(드묾)
   }
-  const share = Math.floor(pot / win.length);
-  win.forEach(p => G.stacks[p] += share);
-  G.stacks[1 - G.button] += pot - share * win.length; // 나눠떨어지지 않는 1칩은 빅 블라인드에게
-  H.result = { win, pot, showdown: H.folded === null };
-  H.committed = [0, 0]; H.bets = [0, 0];
+  const score = lv.length > 1 ? Object.fromEntries(lv.map(i => [i, evaluate([...H.hole[i], ...H.board])])) : null;
+  const order = Array.from({ length: n }, (_, k) => (G.button + 1 + k) % n); // 남는 칩은 버튼 왼쪽부터
+  for (const pot of pots) {
+    const best = score && Math.max(...pot.elig.map(i => score[i]));
+    const win = score ? pot.elig.filter(i => score[i] === best) : pot.elig;
+    const unit = Math.floor(pot.amt / CHIP / win.length) * CHIP;
+    win.forEach(i => G.stacks[i] += unit);
+    let odd = pot.amt - unit * win.length;
+    for (const i of order) if (odd && win.includes(i)) { const c = Math.min(CHIP, odd); G.stacks[i] += c; odd -= c; }
+    pot.win = win;
+  }
+  H.result = { pots, win: [...new Set(pots.flatMap(p => p.win))], pot: total, showdown: lv.length > 1, score };
+  H.committed.fill(0); H.bets.fill(0);
+  // 탈락: 같은 핸드에서 여럿이 떨어지면 핸드 시작 때 칩이 많았던 사람이 더 높은 순위
+  const bust = alive().filter(i => G.stacks[i] === 0).sort((a, b) => H.start[b] - H.start[a]);
+  const remain = alive().length - bust.length;
+  bust.forEach((i, k) => { G.out[i] = true; G.place[i] = remain + 1 + k; });
+  if (alive().length === 1) G.place[alive()[0]] = 1;
+  H.busted = bust;
 }
 // 한 단계 진행: 'act'(H.toAct 차례) | 'deal'(카드 깔림) | 'end'(정산 완료)
 function step() {
-  if (H.folded === null && !roundOver()) return 'act';
-  if (H.folded === null && H.board.length < 5) { nextStreet(); return 'deal'; }
+  const many = live().length > 1;
+  if (many && !roundOver()) { if (!needsAction(H.toAct)) H.toAct = nextOf(Math.max(0, H.toAct), needsAction); return 'act'; }
+  if (many && H.board.length < 5) { nextStreet(); return 'deal'; }
   settle(); return 'end';
 }
 
-// ===== AI: EV 최대화 =====
-// ponytail: EV는 이번 베팅 라운드만 본다(이후 스트리트의 임플라이드 오즈 무시). 더 강하게 하려면 스트리트별 트리 탐색
+// ===== AI: 각자 자기 칩 기대값(EV)을 최대화. 서로 편먹지 않고 자기 패와 공개 정보만 본다 =====
+// 성격은 계산식은 같고 몇 가지 성향만 다르다.
+//  risk: 콜당했을 때 잃을 칩 감점 / bluff·slow: 블러프·슬로플레이 빈도 / realize: 에퀴티 실현율 보정(+면 더 콜)
+//  defend: 상대가 얼마나 버틸 거라고 보는지(작을수록 상대가 잘 접는다고 봄) / press: 레이즈 가산점(팟 대비)
+const STYLES = {
+  pro:     { tag: '정석',   risk: 0.04, bluff: 0.12, slow: 0.15, realize: 0,     defend: 1,    press: 0 },
+  rock:    { tag: '바위',   risk: 0.07, bluff: 0.04, slow: 0.08, realize: -0.05, defend: 1.05, press: 0 },
+  station: { tag: '콜링',   risk: 0.02, bluff: 0.05, slow: 0.2,  realize: 0.07,  defend: 1.15, press: 0 },
+  lag:     { tag: '공격형', risk: 0.03, bluff: 0.25, slow: 0.05, realize: 0.02,  defend: 0.88, press: 0.05 },
+};
+// ponytail: EV는 이번 베팅 라운드만 본다(이후 스트리트의 임플라이드 오즈 무시). 칩 EV = 승자독식 토너먼트의 우승 확률에 비례한다고 본다(ICM 미적용)
 function decide(p) {
-  const o = 1 - p, L = legal(p), owe = H.bets[o] - H.bets[p];
-  const pot = H.committed[0] + H.committed[1] - (owe - L.toCall); // 내가 못 받는 상대 초과분 제외
+  // G.styles[p]: 페르소나(수치 묶음) 또는 성격 이름
+  const s0 = G.styles[p], S = typeof s0 === 'object' && s0 ? s0 : STYLES[s0] || STYLES.pro, L = legal(p), mb = maxBet(), opps = live().filter(i => i !== p);
+  const myAfter = H.committed[p] + L.toCall;
+  const potCall = H.committed.reduce((s, c, i) => s + Math.min(i === p ? myAfter : c, myAfter), 0); // 콜하면 내가 이길 수 있는 팟
+  const potAll = sum(H.committed); // 모두 접으면 내가 가져가는 칩
   const map = strengthMap(H.board, new Set([...H.hole[p], ...H.board]));
-  // 상대 성향 학습 (사전값에서 시작해 관찰로 갱신)
-  //  rr: 레이즈 빈도 (사전값 75%) / defend: 1 = MDF만큼 콜, 1보다 크면 더 자주 콜 (사전값 1)
-  const st = G.stats[o], rr = (st.raises + 3) / (st.chances + 4), defend = (st.faced - st.folded + 2) / (st.mdf + 2);
-  const cut = rangeCut(H.aggro[o], rr), eq = equity(H.hole[p], H.board, cut, map);
-  // 에퀴티 실현율: 뒤에 스트리트가 남으면 약한 패는 상대 베팅에 접게 돼 승률을 다 못 챙기고, 강한 패는 더 뽑아낸다
-  // (올인이면 끝까지 가므로 그대로). 승률 30% → 65%만, 50% → 85%, 70% → 105% 실현
-  const realize = (e, allIn) => H.board.length < 5 && !allIn ? e * Math.min(1.1, Math.max(0.6, 0.85 + (e - 0.5))) : e;
+  // 상대마다 성향을 학습 (사전값에서 시작해 관찰로 갱신). rr: 레이즈 빈도(사전값 75%) / 방어: 1 = MDF만큼 콜
+  const rrOf = q => (G.stats[q].raises + 3) / (G.stats[q].chances + 4);
+  const defOf = q => (G.stats[q].faced - G.stats[q].folded + 2) / (G.stats[q].mdf + 2) * S.defend;
+  const cuts = opps.map(q => rangeCut(H.aggro[q], rrOf(q)));
+  const it = Math.max(400, Math.round(ITERS * 2 / (opps.length + 1)));
+  const eq = equity(H.hole[p], H.board, cuts, map, it);
+  // 에퀴티 실현율: 뒤에 스트리트가 남으면 약한 패는 상대 베팅에 접게 돼 승률을 다 못 챙기고, 강한 패는 더 뽑아낸다 (올인이면 그대로)
+  const later = H.board.length < 5;
+  const realize = (e, allIn) => later && !allIn ? e * Math.min(1.1, Math.max(0.6, 0.85 + (e - 0.5) + S.realize)) : e;
   const opts = [];
   if (!L.canCheck) opts.push({ type: 'fold', label: '폴드', ev: 0 });
   opts.push({ type: L.canCheck ? 'check' : 'call', label: L.canCheck ? '체크' : '콜', to: H.bets[p] + L.toCall,
-              ev: realize(eq, L.toCall >= G.stacks[p] || !G.stacks[o]) * (pot + L.toCall) - L.toCall });
+              ev: realize(eq, L.toCall >= G.stacks[p] || opps.every(q => !G.stacks[q])) * potCall - L.toCall });
+  let sims = it;
   if (L.canRaise) {
-    const seen = new Set(), verb = H.bets[o] ? '레이즈' : '베팅';
-    for (const [x, name] of [[0.5, '½팟'], [1, '팟'], [Infinity, '올인']]) {
-      const to = Math.max(L.minTo, Math.min(L.maxTo, Math.round(H.bets[o] + x * (pot + L.toCall))));
-      const risk = to - H.bets[p], call = to - H.bets[o], P = pot + risk;
+    const seen = new Set(), verb = mb ? '레이즈' : '베팅';
+    for (const [x, name] of [[0.5, '1/2팟'], [1, '팟'], [Infinity, '올인']]) {
+      const to = Math.max(L.minTo, Math.min(L.maxTo, Math.round((mb + x * potCall) / CHIP) * CHIP));
+      const risk = to - H.bets[p], P = potAll + risk;
       // 올인은 상대가 낼 돈이 팟의 3배 이하일 때만 (스택이 깊을 때 과도한 오버벳 올인 방지)
-      if (seen.has(to) || (to === L.maxTo && call > 3 * (pot + L.toCall))) continue;
+      if (seen.has(to) || (to === L.maxTo && to - mb > 3 * potCall)) continue;
       seen.add(to);
-      // 크게 걸수록 더 많이 접지만, 콜해 오는 건 레인지 상위 (1-f)뿐이라 콜 받을 때 승률이 떨어진다
-      const f = Math.min(0.9, Math.max(0, 1 - defend * (P - call) / P));
-      const eqC = equity(H.hole[p], H.board, cut + (1 - cut) * f, map);
-      const q = G.stacks[o] > call ? 0.1 : 0; // 상대가 다시 레이즈할 확률 → 그때는 접고 건 돈을 잃는다
-      opts.push({ type: 'raise', label: to === L.maxTo ? '올인' : `${verb} ${name}`, to, f, eqC,
-                  ev: f * pot + (1 - f - q) * (realize(eqC, to === L.maxTo) * (pot + risk + call) - risk) - q * risk });
+      // 상대마다: 크게 걸수록 더 많이 접지만, 콜해 오는 건 레인지 상위 (1-f)뿐. 올인한 상대는 접을 수 없다
+      let fAll = 1, reRaisers = 0, expCall = 0;
+      const fq = opps.map(q => {
+        if (!G.stacks[q]) { fAll = 0; return 0; }
+        const call = Math.min(to - H.bets[q], G.stacks[q]), f = Math.min(0.9, Math.max(0, 1 - defOf(q) * (P - call) / P));
+        fAll *= f; expCall += (1 - f) * call; if (G.stacks[q] > call) reRaisers++;
+        return f;
+      });
+      const qr = Math.min(1 - fAll, 1 - 0.9 ** reRaisers); // 누군가 다시 레이즈하면 접고 건 돈을 잃는다
+      const eqC = equity(H.hole[p], H.board, cuts.map((c, k) => c + (1 - c) * fq[k]), map, it); sims += it;
+      const potCalled = P + (fAll < 1 ? expCall / (1 - fAll) : 0);
+      opts.push({ type: 'raise', label: to === L.maxTo ? '올인' : `${verb} ${name}`, to, f: fAll, eqC,
+                  ev: fAll * potAll + (1 - fAll - qr) * (realize(eqC, to === L.maxTo) * potCalled - risk) - qr * risk + S.press * potCall });
     }
   }
-  // 위험 보정: EV 차이가 작으면 콜당했을 때 잃을 칩이 적은 쪽을 고른다 (그 칩의 4%만큼 감점)
-  const riskAdj = x => x.ev - 0.04 * (x.type === 'raise' ? (1 - x.f) * (x.to - H.bets[p]) : x.type === 'call' ? L.toCall : 0);
+  // 위험 보정: EV 차이가 작으면 콜당했을 때 잃을 칩이 적은 쪽을 고른다
+  const riskAdj = x => x.ev - S.risk * (x.type === 'raise' ? (1 - x.f) * (x.to - H.bets[p]) : x.type === 'call' ? L.toCall : 0);
   let pick = opts.reduce((a, b) => riskAdj(b) > riskAdj(a) ? b : a);
   let tag = pick === opts.reduce((a, b) => b.ev > a.ev ? b : a) ? '' : '리스크 회피';
   const r = Math.random();
-  if (pick.type === 'raise' && eq > 0.8 && H.board.length < 5 && r < 0.15) {
+  if (pick.type === 'raise' && eq > 0.8 && later && r < S.slow) {
     pick = opts.find(x => x.type === 'check' || x.type === 'call'); tag = '슬로플레이';
-  } else if (pick.type === 'check' && opts.some(x => x.type === 'raise') && eq < 0.35 && r < 0.12) {
+  } else if (pick.type === 'check' && opts.some(x => x.type === 'raise') && eq < 0.35 && r < S.bluff) {
     pick = opts.find(x => x.type === 'raise'); tag = '블러프';
   }
-  return { type: pick.type, to: pick.to, info: { eq, cut, rr, opts, pick, tag, foldSeen: st.faced ? st.folded / st.faced : null,
-    potOdds: L.toCall / (pot + L.toCall), iters: ITERS * opts.filter(x => x.eqC !== undefined).length + ITERS, street: H.board.length } };
+  const avg = a => a.length ? sum(a) / a.length : 0, seenQ = opps.filter(q => G.stats[q].faced);
+  return { type: pick.type, to: pick.to, info: { who: p, eq, opts, pick, tag, iters: sims, street: H.board.length, opps: opps.length,
+    cut: avg(cuts), rr: avg(opps.map(rrOf)), foldSeen: seenQ.length ? avg(seenQ.map(q => G.stats[q].folded / G.stats[q].faced)) : null,
+    potOdds: L.toCall / (potCall || 1) } };
 }
 
 // ===== 셀프 테스트 (?test=1) =====
 function selfTest() {
   const E = s => evaluate(s.split(' ').map(card)), cat = s => Math.floor(E(s) / 13 ** 5);
+  // 사이드팟 시나리오: 정해진 패·보드로 정산만 확인
+  const pot = (stacks, committed, folded, holes, board, button = 0) => {
+    const saved = [G, H];
+    G = { n: stacks.length, stacks: stacks.slice(), out: stacks.map(() => false), place: stacks.map(() => null), button, hand: 1, hpl: 10, stats: [] };
+    H = { committed: committed.slice(), bets: committed.map(() => 0), folded: folded.slice(), hole: holes.map(h => h ? h.split(' ').map(card) : []),
+          board: board.split(' ').map(card), start: committed.map((c, i) => c + stacks[i]) };
+    settle();
+    const r = { stacks: G.stacks, place: G.place };
+    [G, H] = saved;
+    return r;
+  };
   const cases = [
     ['휠 스트레이트', () => cat('As 2d 3c 4h 5s 9d Kc') === 4],
     ['6 하이 > 휠', () => E('2d 3c 4h 5s 6d Kc Qh') > E('As 2d 3c 4h 5s 9d Kc')],
@@ -546,20 +713,35 @@ function selfTest() {
     ['로열 플러시 이름', () => handName(E('As Ks Qs Js Ts 2d 3c')) === '로열 플러시'],
     ['best5 = 7장 평가', () => { const cs = 'Ks Kd Kc 2h 2s 5d 7c'.split(' ').map(card); return best5(cs).score === evaluate(cs); }],
     ['프리플랍 백분위', () => PCT[card('As') * 52 + card('Ah')] > 0.95 && PCT[card('7s') * 52 + card('2d')] < 0.1],
+    // 0: 1,000 올인(최강), 1: 3,000 올인(중간), 2: 5,000(최약), 3: 2,000 내고 폴드 → 메인 4,000은 0, 사이드 5,000은 1, 남는 2,000은 2
+    ['사이드팟: 짧은 올인이 이기면 메인만', () => { const r = pot([0, 0, 0, 1000], [1000, 3000, 5000, 2000], [false, false, false, true],
+      ['As Ad', 'Ks Kd', '7c 2h', '9s 9d'], 'Ah Kh 5c 3d 8s');
+      return r.stacks.join() === '4000,5000,2000,1000' && r.place.every(x => x === null); }],
+    ['사이드팟: 세 명 나눠먹기 + 남는 칩', () => { const r = pot([0, 0, 0], [300, 300, 300], [false, false, false],
+      ['2c 3c', '2d 3d', '2h 3h'], 'As Ks Qs Js 9d', 0); // 보드 플레이 → 900을 셋이 300씩
+      return r.stacks.join() === '300,300,300'; }],
+    ['남는 1칩은 버튼 왼쪽부터', () => { const r = pot([0, 0, 1000], [100, 100, 100], [false, false, true],
+      ['2c 3c', '2d 3d', '7h 8h'], 'As Ks Qs Js 9d', 0); // 300을 둘이: 100씩 + 남는 100은 버튼(0) 왼쪽인 1에게
+      return r.stacks.join() === '100,200,1000'; }],
+    ['폴드한 사람의 칩도 팟에 남는다', () => { const r = pot([0, 500, 0], [400, 400, 200], [false, false, true],
+      ['As Ad', '7c 2h', 'Ks Kd'], 'Ah Kh 5c 3d 8s');
+      return r.stacks.join() === '1000,500,0'; }],
   ];
-  return { total: cases.length, fails: cases.filter(([, f]) => !f()).map(([n]) => n) };
+  return { total: cases.length, fails: cases.filter(([, f]) => { try { return !f(); } catch (e) { return true; } }).map(([n]) => n) };
 }
 </script>
 
 <script>
 // ===== UI =====
 const $ = id => document.getElementById(id);
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-const pct = x => (x * 100).toFixed(1) + '%';
-const NAMES = ['나', '컴퓨터'];
-const STREET = { 0: '프리플랍', 3: '플랍', 4: '턴', 5: '리버' };
+const Q = new URLSearchParams(location.search), FAST = Q.has('fast'); // ?fast=1: 확인용으로 연출을 빠르게
 const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
-let phase = 'deal'; // 'player' | 'ai' | 'deal' | 'end'
+const T = ms => FAST ? Math.round(ms * 0.05) : calm ? Math.round(ms * 0.35) : ms;
+const sleep = ms => new Promise(r => setTimeout(r, T(ms)));
+const pct = x => (x * 100).toFixed(1) + '%';
+const STREET = { 0: '프리플랍', 3: '플랍', 4: '턴', 5: '리버' };
+const SHOT_CLOCK = 20, TIME_CHIP_SEC = 30, TIME_CHIPS = 3;
+let phase = 'lobby', mode = 'hu', bios = [], run = 0, nextTimer = null;
 
 // 브라우저 저장소 (사생활 모드 등에서 막혀도 게임은 돌아가게)
 const store = {
@@ -567,6 +749,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
 const REC = Object.assign({ games: 0, won: 0, hands: 0, handsWon: 0, bestPot: 0 }, store.get('holdem.record', {}));
+const RFT = Object.assign({ 6: { games: 0, wins: 0, best: 0, sum: 0 }, 9: { games: 0, wins: 0, best: 0, sum: 0 } }, store.get('holdem.record.ft', {}));
 // 키 이름 변경: 예전 "소리 켬"(상태 표시) 버튼을 켜는 버튼으로 오해해 꺼 둔 설정을 초기화
 let soundOn = store.get('holdem.sound.v2', true), actx = null;
 
@@ -606,21 +789,87 @@ function sfx(kind, n = 1) {
       win: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.09, 0.4, 0.35, 'triangle')),
       lose: () => [784, 659, 494].forEach((f, i) => tone(f, i * 0.14, 0.45, 0.35, 'triangle')),
       level: () => { tone(660, 0, 0.14, 0.4, 'square'); tone(990, 0.14, 0.3, 0.4, 'square'); },
+      tick: () => tone(1600, 0, 0.035, 0.35, 'square'),
     })[kind]();
   } catch {}
 }
 const actSound = label => sfx(label === '폴드' ? 'fold' : label === '체크' ? 'check' : 'chip');
 
-function renderRecord() {
-  $('rGames').textContent = `${REC.won}승 ${REC.games - REC.won}패`;
-  $('rHands').innerHTML = REC.hands ? `${Math.round(REC.handsWon / REC.hands * 100)}%<small>${REC.handsWon}/${REC.hands}</small>` : '—';
-  $('rPot').textContent = REC.bestPot ? fmt(REC.bestPot) : '—';
-}
-function renderSound() {
-  $('bSound').textContent = soundOn ? '소리 끄기' : '소리 켜기'; // 누르면 일어날 일을 쓴다
-  $('bSound').setAttribute('aria-pressed', soundOn);
+// ===== 페르소나: 게임마다 이름·소개·성격·성향 수치를 무작위로 =====
+const NAME_POOL = ['빅토르', '민지', '레오', '사쿠라', '도윤', '엘레나', '마르코', '하나', '제이크', '수아', '이반', '루시아', '카이', '나탈리', '오스카', '유나'];
+const BIOS = {
+  pro: ['온라인 포커 출신 정석 플레이어', 'EV를 계산하는 차가운 머리', '대회 우승 경력의 베테랑', '표정 변화가 없는 수학자'],
+  rock: ['좋은 패만 기다리는 인내심의 화신', '20년 경력의 노련한 바위', '실수 없는 은퇴한 회계사', '한 번 걸면 진짜인 사람'],
+  station: ['끝까지 봐야 직성이 풀리는 호기심', '포커는 즐기러 온 사업가', '콜은 공짜라고 믿는 낙천가', '리버의 기적을 믿는 로맨티스트'],
+  lag: ['라스베이거스에서 온 하이롤러', '블러프를 사랑하는 승부사', '베팅이 곧 대화인 사람', '칩을 흔들어 압박하는 스타일'],
+};
+const pickOne = a => a[Math.floor(Math.random() * a.length)];
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+function persona() {
+  const key = pickOne(Object.keys(STYLES)), b = STYLES[key], j = () => 0.8 + Math.random() * 0.4; // 같은 성격이어도 ±20% 흔든다
+  return { bio: pickOne(BIOS[key]), style: { tag: b.tag, risk: b.risk * j(), bluff: b.bluff * j(), slow: b.slow * j(), realize: b.realize * j(),
+    defend: b.defend * (0.95 + Math.random() * 0.1), press: b.press * j() } };
 }
 
+// ===== 좌석 배치: [좌석 x, y, 베팅 x, y] (테이블 대비 %). 좌석 0 = 나(아래 가운데, y=100은 아래에 붙임) =====
+const LAYOUT = {
+  p: { // 세로(폰)
+    2: [[50, 97, 50, 68], [50, 12, 50, 31]],
+    6: [[50, 97, 50, 64], [10, 66, 26, 60], [10, 27, 26, 32], [50, 10, 50, 21], [90, 27, 74, 32], [90, 66, 74, 60]],
+    9: [[50, 97, 50, 64], [10, 76, 25, 70], [8, 54, 22, 58], [10, 30, 24, 34], [31, 10, 34, 21], [69, 10, 66, 21], [90, 30, 76, 34], [92, 54, 78, 58], [90, 76, 75, 70]],
+  },
+  l: { // 가로(태블릿·PC)
+    2: [[50, 97, 50, 66], [50, 12, 50, 30]],
+    6: [[50, 97, 50, 66], [14, 70, 28, 63], [14, 28, 28, 37], [50, 10, 50, 25], [86, 28, 72, 37], [86, 70, 72, 63]],
+    9: [[50, 97, 50, 66], [26, 84, 33, 69], [8, 60, 21, 58], [11, 28, 25, 37], [36, 10, 38, 24], [64, 10, 62, 24], [89, 28, 75, 37], [92, 60, 79, 58], [74, 84, 67, 69]],
+  },
+};
+const orient = () => $('table').clientWidth >= 640 ? 'l' : 'p';
+function placeSeats() {
+  if (!G) return;
+  const L = LAYOUT[orient()][G.n];
+  L.forEach(([sx, sy, bx, by], i) => {
+    Object.assign($('seat' + i).style, { left: sx + '%', top: sy + '%' });
+    Object.assign($('bet' + i).style, { left: bx + '%', top: by + '%' });
+    $('bet' + i).classList.toggle('r', bx > 55);
+  });
+  moveDealer();
+}
+function moveDealer() {
+  const [sx, sy, bx, by] = LAYOUT[orient()][G.n][G.button], side = G.button === 0 ? 17 : sx > 55 ? -12 : sx < 45 ? 12 : 16;
+  Object.assign($('dealerBtn').style, { left: (G.button ? sx * 0.3 + bx * 0.7 : sx) + side + '%', top: (G.button ? sy * 0.3 + by * 0.7 : by + 9) + '%' });
+}
+function buildTable() {
+  const n = G.n;
+  $('table').dataset.n = n;
+  $('seats').textContent = ''; $('bets').textContent = '';
+  for (let i = 0; i < n; i++) {
+    const s = document.createElement('div');
+    s.className = 'seat ' + (i ? 'ai' : 'me'); s.id = 'seat' + i;
+    const tag = i && n > 2 ? `<em>${G.styles[i].tag}</em>` : '';
+    s.innerHTML = `<div class="hand" id="cards${i}"></div>
+      <div class="plate"><span class="name">${G.names[i]}${tag}</span><b class="stack" id="stack${i}"></b><span class="badge" id="badge${i}" hidden></span>
+      ${i ? '' : `<button class="timechip" id="bTime" aria-label="타임칩 사용: 30초 추가"><b>+30초</b><span id="tcN"></span></button>`}</div>
+      <div class="info"><span class="say" id="say${i}"></span><span class="hname" id="hname${i}"></span></div>`;
+    if (i && n > 2) s.querySelector('.plate').onclick = () => toggleBio(i);
+    $('seats').append(s);
+    const b = document.createElement('div');
+    b.className = 'bet off'; b.id = 'bet' + i; b.innerHTML = '<span class="chipset"></span><b></b>';
+    $('bets').append(b);
+  }
+  $('bTime').onclick = useTimeChip;
+  placeSeats();
+}
+function toggleBio(i) {
+  const plate = $('seat' + i).querySelector('.plate'), open = plate.querySelector('.bio');
+  document.querySelectorAll('.bio').forEach(x => x.remove());
+  if (open) return;
+  const d = document.createElement('div');
+  d.className = 'bio'; d.innerHTML = `<b>${G.names[i]} · ${G.styles[i].tag}</b>${bios[i]}`;
+  plate.append(d);
+}
+
+// ===== 카드·칩 그리기 =====
 function cardEl(c, up) {
   const d = document.createElement('div');
   d.setAttribute('role', 'img');
@@ -632,27 +881,123 @@ function cardEl(c, up) {
   d.innerHTML = `<span class="idx">${r}<small>${s}</small></span><span class="pip">${s}</span>`;
   return d;
 }
-// 새로 추가된 카드만 딜 애니메이션, 같은 카드를 뒤집을 땐 플립
-function setCards(el, cards, up) {
-  const prev = el._cards || [], prefix = prev.length <= cards.length && prev.every((c, i) => c === cards[i]);
-  if (prefix && prev.length === cards.length && el._up === up) return;
-  let from = 0, anim = 'deal';
-  if (prefix && el._up === up) from = prev.length;
-  else if (prefix && prev.length === cards.length) anim = 'flip';
-  if (!from) el.textContent = '';
-  cards.slice(from).forEach((c, i) => {
-    const d = cardEl(c, up);
-    d.classList.add(anim); d.style.animationDelay = i * 90 + 'ms';
-    el.append(d);
-  });
+// 보드: 새로 깔린 카드만 딜 애니메이션
+function setBoard(cards) {
+  const el = $('board'), prev = el._cards || [];
+  if (prev.length > cards.length || prev.some((c, i) => c !== cards[i])) { el.textContent = ''; el._cards = []; }
+  const from = el.children.length;
+  cards.slice(from).forEach((c, i) => { const d = cardEl(c, true); d.classList.add('deal'); d.style.animationDelay = T(i * 110) + 'ms'; el.append(d); });
   if (cards.length > from) sfx('deal', cards.length - from);
-  el._cards = cards.slice(); el._up = up;
+  el._cards = cards.slice();
+}
+// 좌석 카드: 나는 앞면, AI는 뒷면(쇼다운 때 뒤집기). 딜 중에는 숨겨 두고 날아온 뒤 보인다
+let dealing = false;
+function renderHole(i) {
+  const el = $('cards' + i), cards = H.hole[i];
+  const show = i === 0 || (!!H.result && H.result.showdown && !H.folded[i]);
+  const key = `${G.hand}|${H.folded[i]}|${show}|${cards.length}`;
+  if (el._key === key) return;
+  const flip = show && el._hand === G.hand && el._show === false && !H.folded[i];
+  el._key = key; el._hand = G.hand; el._show = show;
+  el.textContent = '';
+  if (H.folded[i]) return; // 접은 패는 가운데로 날아간 뒤 비운다
+  for (const c of cards) { const d = cardEl(c, show); if (dealing) d.classList.add('undealt'); if (flip) d.classList.add('flip'); el.append(d); }
+}
+const DENOMS = [25000, 5000, 1000, 500, 100]; // 100 검정 · 500 보라 · 1K 노랑 · 5K 버건디 · 25K 초록
+function breakdown(amt, maxStacks, per) {
+  const out = [];
+  let rest = amt;
+  for (const d of DENOMS) { const k = Math.floor(rest / d); if (k) { out.push([d, Math.min(k, per)]); rest -= k * d; } }
+  return out.slice(0, maxStacks);
+}
+// 금액을 액면가별 칩 더미로. 맨 위 칩만 숫자가 똑바로 보이는 스프라이트, 아래 칩은 각도를 섞는다
+function setChipset(el, amt, seed, maxStacks = 3, per = 8) {
+  if (el._amt === amt) return;
+  el._amt = amt;
+  el.innerHTML = breakdown(amt, maxStacks, per).map(([d, k], s) =>
+    `<span class="chips" style="height:calc(var(--chip) * ${(0.82 + (k - 1) * 0.0777).toFixed(3)})">${Array.from({ length: k }, (_, i) =>
+      `<img src="assets/chips/chip-${d}-${i === k - 1 ? 0 : (seed + i + s) % 2}.png" alt="" style="bottom:calc(var(--chip) * ${(i * 0.0777).toFixed(3)}); left:${(seed * 7 + i * 5 + s) % 3 - 1}px">`).join('')}</span>`).join('');
 }
 
+// ===== 애니메이션 도구: 화면 위 레이어에서 A → B로 날린다 =====
+function centerOf(el) { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height }; }
+function fly(node, from, to, { dur = 420, rot = 0, fade = false, delay = 0, scale = 1 } = {}) {
+  node.classList.add('flyer'); $('fx').append(node);
+  node.style.setProperty('--chip', getComputedStyle($('table')).getPropertyValue('--chip')); // 테이블 밖 레이어라 칩 크기 변수를 넘겨준다
+  const w = node.offsetWidth, h = node.offsetHeight;
+  const a = node.animate([
+    { transform: `translate(${from.x - w / 2}px, ${from.y - h / 2}px) rotate(0deg) scale(1)`, opacity: 1 },
+    { transform: `translate(${to.x - w / 2}px, ${to.y - h / 2}px) rotate(${rot}deg) scale(${scale})`, opacity: fade ? 0 : 1 },
+  ], { duration: T(dur), delay: T(delay), easing: 'cubic-bezier(.2,.75,.25,1)', fill: 'both' });
+  return a.finished.then(() => node.remove(), () => node.remove());
+}
+const cloneOf = el => { const c = el.cloneNode(true); c.removeAttribute('id'); c.style.cssText = ''; c.classList.remove('off'); return c; };
+function chipNode(amt) {
+  const d = DENOMS.find(x => amt >= x) || 100, img = new Image(), size = parseFloat(getComputedStyle($('table')).getPropertyValue('--chip')) || 26;
+  img.src = `assets/chips/chip-${d}-0.png`; img.style.width = size + 'px';
+  return img;
+}
+async function dealAnim() {
+  const from = centerOf($('deck')), jobs = [];
+  let k = 0;
+  for (let r = 0; r < 2; r++) for (let j = 1; j <= G.n; j++) {
+    const i = (G.button + j) % G.n, slot = $('cards' + i).children[r];
+    if (!slot) continue;
+    const to = centerOf(slot), c = document.createElement('div');
+    c.className = 'card back'; c.style.width = to.w + 'px'; c.style.height = to.h + 'px';
+    const delay = k++ * 70;
+    setTimeout(() => sfx('deal'), T(delay));
+    jobs.push(fly(c, from, to, { dur: 300, rot: 360, delay }).then(() => slot.classList.remove('undealt')));
+  }
+  await Promise.all(jobs);
+}
+async function chipFly(p, amt) { // 좌석 → 베팅 자리
+  await fly(chipNode(amt), centerOf($('seat' + p).querySelector('.plate')), centerOf($('bet' + p)), { dur: 320 });
+}
+async function muckAnim(p) { // 접은 패를 가운데로
+  const cards = [...$('cards' + p).children], to = centerOf($('board'));
+  await Promise.all(cards.map((c, k) => { const n = c.cloneNode(true), r = centerOf(c); n.style.width = r.w + 'px'; n.style.height = r.h + 'px'; c.style.visibility = 'hidden';
+    return fly(n, r, to, { dur: 380, rot: 140 + k * 40, fade: true, scale: 0.7 }); }));
+}
+async function collectAnim() { // 베팅 → 팟
+  const to = centerOf($('pile').childElementCount ? $('pile') : $('pot'));
+  const jobs = [...document.querySelectorAll('#bets .bet:not(.off) .chipset')].map((el, k) => {
+    const n = cloneOf(el), from = centerOf(el); el.parentElement.classList.add('off');
+    return fly(n, from, to, { dur: 380, delay: k * 40 });
+  });
+  if (jobs.length) { sfx('chip'); await Promise.all(jobs); }
+}
+async function payoutAnim(pots) { // 팟 → 승자
+  const src = $('pile'), from = centerOf(src.childElementCount ? src : $('pot')), jobs = [];
+  pots.forEach((pot, k) => pot.win.forEach(w => {
+    const n = src.childElementCount ? cloneOf(src) : chipNode(pot.amt);
+    jobs.push(fly(n, from, centerOf($('seat' + w).querySelector('.plate')), { dur: 560, delay: k * 260 }));
+  }));
+  src.style.visibility = 'hidden';
+  await Promise.all(jobs);
+  src.style.visibility = '';
+}
+function countStack(i) { // 칩 수가 올라가는 연출
+  const el = $('stack' + i), from = el._v ?? G.stacks[i], to = G.stacks[i];
+  if (from === to || calm || FAST) { el._v = to; el.textContent = fmt(to); return; }
+  const t0 = performance.now();
+  el._anim = true; // 연출 중에는 render()가 숫자를 덮어쓰지 않게
+  const tick = t => { const k = Math.min(1, (t - t0) / 700), v = Math.round((from + (to - from) * (1 - (1 - k) ** 3)) / CHIP) * CHIP;
+    el.textContent = fmt(v); if (k < 1) requestAnimationFrame(tick); else { el._v = to; el._anim = false; } };
+  requestAnimationFrame(tick);
+}
+function flashBanner(text, sub) {
+  const b = document.createElement('div');
+  b.className = 'level-banner'; b.innerHTML = `${text}${sub ? `<small>${sub}</small>` : ''}`;
+  $('table').append(b);
+  setTimeout(() => b.remove(), T(2500));
+}
+
+// ===== 그리기 =====
 function log(t, cls = '') {
   const ol = $('log'), li = document.createElement('li');
   li.textContent = t; li.className = cls; ol.append(li);
-  while (ol.children.length > 150) ol.firstChild.remove();
+  while (ol.children.length > 200) ol.firstChild.remove();
   ol.scrollTop = ol.scrollHeight;
 }
 function say(p, t) {
@@ -660,43 +1005,50 @@ function say(p, t) {
   el.textContent = t; el.classList.remove('pop');
   if (t) { void el.offsetWidth; el.classList.add('pop'); }
 }
-
+const who = i => G.names[i];
 function render() {
-  for (const p of [0, 1]) {
-    $('stack' + p).textContent = fmt(G.stacks[p]);
-    $('dealer' + p).hidden = G.button !== p;
-    $('bet' + p).textContent = fmt(H.bets[p]);
-    $('bet' + p).classList.toggle('off', !H.bets[p]);
+  const n = G.n, collected = sum(H.committed) - sum(H.bets);
+  for (let i = 0; i < n; i++) {
+    const st = $('stack' + i);
+    if (st._v !== G.stacks[i] && !st._anim) { st._v = G.stacks[i]; st.textContent = fmt(G.stacks[i]); }
+    const seat = $('seat' + i);
+    seat.classList.toggle('turn', H.toAct === i && (phase === 'player' || phase === 'ai'));
+    seat.classList.toggle('folded', H.folded[i] && !G.out[i]);
+    seat.classList.toggle('out', G.out[i]);
+    renderHole(i);
+    const bet = $('bet' + i);
+    setChipset(bet.firstElementChild, H.bets[i], i);
+    bet.lastElementChild.textContent = fmt(H.bets[i]);
+    bet.classList.toggle('off', !H.bets[i]);
   }
-  $('seat0').classList.toggle('turn', phase === 'player');
-  $('seat1').classList.toggle('turn', phase === 'ai');
-  setCards($('cards0'), H.hole[0], true);
-  setCards($('cards1'), H.hole[1], !!H.result); // 핸드가 끝나면 복기용으로 공개
-  setCards($('board'), H.board, true);
-  $('pot').textContent = fmt(H.committed[0] + H.committed[1]);
+  setBoard(H.board);
+  setChipset($('pile'), collected, 2, 5, 10);
+  $('pot').textContent = fmt(sum(H.committed));
   $('potBox').hidden = !!H.result;
   $('banner').hidden = !H.result;
   const lv = levelOf(G.hand), [sb, bb] = LEVELS[lv];
   $('handNo').textContent = `핸드 #${G.hand}`;
-  $('blinds').textContent = `레벨 ${lv + 1} · 블라인드 ${sb}/${bb}` +
-    (lv < LEVELS.length - 1 ? ` · 다음 레벨까지 ${HANDS_PER_LEVEL - (G.hand - 1) % HANDS_PER_LEVEL}핸드` : '');
+  $('blinds').textContent = `레벨 ${lv + 1} · ${fmt(sb)}/${fmt(bb)}` + (lv < LEVELS.length - 1 ? ` · 다음 레벨까지 ${G.hpl - (G.hand - 1) % G.hpl}핸드` : '');
+  renderTimeChips();
   renderControls();
   renderGauge();
 }
+function renderTimeChips() {
+  $('tcN').textContent = G.timeChips;
+  $('bTime').disabled = phase !== 'player' || !G.timeChips;
+}
 
+// ===== 조작 =====
 function renderControls() {
-  const over = !!H.result;
-  $('actions').hidden = over;
-  $('bNext').hidden = !over;
-  if (over) {
-    $('bNext').textContent = !G.stacks[1] ? '완승! 새 게임' : !G.stacks[0] ? '파산… 새 게임' : '다음 핸드';
-    return;
-  }
+  const over = !!H.result || phase === 'over';
+  $('actions').hidden = over || G.out[0];
+  $('bNext').hidden = !over || phase === 'over';
+  if (over) return;
   const on = phase === 'player', L = legal(0);
   $('bFold').disabled = !on || L.canCheck;
   $('bCall').disabled = !on;
   for (const el of [$('bRaise'), $('slider'), $('bMinus'), $('bPlus'), ...$('presets').children]) el.disabled = !on || !L.canRaise;
-  if (!on) { $('bCall').textContent = '체크 · 콜'; $('bRaise').textContent = '레이즈'; return; }
+  if (!on) { $('bCall').textContent = H.folded[0] ? '폴드함' : '체크 · 콜'; $('bRaise').textContent = '레이즈'; return; }
   $('bCall').textContent = L.canCheck ? '체크' : `콜 ${fmt(L.toCall)}`;
   raiseLabel();
 }
@@ -704,21 +1056,21 @@ const inBB = v => `${+(v / H.bb).toFixed(1)}BB`;
 function raiseLabel() {
   if (phase !== 'player' || !legal(0).canRaise) return;
   const v = +$('slider').value;
-  $('bRaise').innerHTML = (v - H.bets[0] === G.stacks[0] ? '올인 ' : H.bets[1] ? '레이즈 ' : '베팅 ') + fmt(v) + `<small>${inBB(v)}</small>`;
+  $('bRaise').innerHTML = (v - H.bets[0] === G.stacks[0] ? '올인 ' : maxBet() ? '레이즈 ' : '베팅 ') + fmt(v) + `<small>${inBB(v)}</small>`;
   for (const b of $('presets').children) b.classList.toggle('on', +b.dataset.to === v);
 }
-// 레이즈 프리셋: 프리플랍 첫 레이즈는 BB 배수, 상대가 레이즈했으면 그 금액의 배수(BB로 표시), 플랍부터는 팟 비율
+// 레이즈 프리셋: 프리플랍 첫 레이즈는 BB 배수, 누가 레이즈했으면 그 금액의 배수(BB로 표시), 플랍부터는 팟 비율
 function buildPresets() {
-  const L = legal(0), pot = H.committed[0] + H.committed[1];
-  const list = !H.board.length && H.bets[1] <= H.bb ? [2, 2.5, 3, 4].map(x => [null, x * H.bb])
-    : !H.board.length ? [2.5, 3, 4].map(x => [null, x * H.bets[1]])
-    : [['⅓팟', 1 / 3], ['½팟', 0.5], ['¾팟', 0.75], ['팟', 1]].map(([n, x]) => [n, H.bets[1] + x * (pot + L.toCall)]);
+  const L = legal(0), mb = maxBet(), potCall = H.committed.reduce((s, c, i) => s + Math.min(i ? c : c + L.toCall, H.committed[0] + L.toCall), 0);
+  const list = !H.board.length && mb <= H.bb ? [2, 2.5, 3, 4].map(x => [null, x * H.bb])
+    : !H.board.length ? [2.5, 3, 4].map(x => [null, x * mb])
+    : [['1/3팟', 1 / 3], ['1/2팟', 0.5], ['3/4팟', 0.75], ['팟', 1]].map(([n, x]) => [n, mb + x * potCall]);
   const seen = new Set();
   $('presets').textContent = '';
   for (const [name, v] of [...list, ['올인', L.maxTo]]) {
-    const to = Math.max(L.minTo, Math.min(L.maxTo, Math.round(v)));
+    const r = Math.round(v / CHIP) * CHIP, to = Math.max(L.minTo, Math.min(L.maxTo, r));
     // 최소 레이즈보다 작거나 올인에 닿는 프리셋은 이름과 실제 금액이 달라지므로 뺀다
-    if (seen.has(to) || (name !== '올인' && (Math.round(v) < L.minTo || to === L.maxTo))) continue;
+    if (seen.has(to) || (name !== '올인' && (r < L.minTo || to === L.maxTo))) continue;
     seen.add(to);
     const b = document.createElement('button');
     b.className = 'chip'; b.dataset.to = to; b.textContent = name || inBB(to);
@@ -727,130 +1079,268 @@ function buildPresets() {
   }
 }
 
+// ===== 샷클락(디지털 카운트다운)과 타임칩 =====
+let clock = null;
+function startClock() {
+  stopClock();
+  clock = { deadline: performance.now() + SHOT_CLOCK * 1000, last: SHOT_CLOCK + 1, iv: setInterval(tickClock, 200) };
+  $('clock').classList.add('on');
+  tickClock();
+}
+function tickClock() {
+  if (!clock) return;
+  const left = Math.max(0, Math.ceil((clock.deadline - performance.now()) / 1000));
+  if (left !== clock.last) {
+    clock.last = left;
+    $('clock').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+    $('clock').classList.toggle('hurry', left <= 5);
+    if (left <= 5 && left > 0) sfx('tick');
+  }
+  if (left <= 0) { stopClock(); log('시간 초과 · 자동 ' + (legal(0).canCheck ? '체크' : '폴드'), 'level'); playerAct(legal(0).canCheck ? 'check' : 'fold'); }
+}
+function stopClock() { if (clock) clearInterval(clock.iv); clock = null; $('clock').classList.remove('on', 'hurry'); }
+function useTimeChip() {
+  if (!clock || !G.timeChips) return;
+  G.timeChips--; clock.deadline += TIME_CHIP_SEC * 1000; clock.last = -1; tickClock();
+  sfx('chip'); log(`타임칩 사용 · +${TIME_CHIP_SEC}초 (남은 타임칩 ${G.timeChips}개)`, 'street');
+  const b = $('bTime'), n = b.cloneNode(true); n.removeAttribute('id');
+  fly(n, centerOf(b), centerOf($('clock')), { dur: 420, fade: true, scale: 0.6 });
+  renderTimeChips();
+}
+
+// ===== EV 계기판 =====
 function renderGauge() {
   const D = H.decision, g = $('gauge'), open = !!H.result || $('cheat').checked, st = $('gState');
   g.classList.toggle('sealed', !!D && !open);
   st.classList.toggle('busy', phase === 'ai');
   st.textContent = phase === 'ai' ? '계산 중' : !D ? '대기' : open ? '공개' : '봉인';
+  $('gWho').textContent = D && G.n > 2 ? `· ${who(D.who)} (${G.styles[D.who].tag})` : '';
   if (g._D === D) return;
   g._D = D;
   if (!D) {
-    $('gBody').innerHTML = '<p class="empty">컴퓨터는 행동할 때마다 몬테카를로 시뮬레이션으로 승률을 구하고, 폴드·콜·레이즈의 기대값(EV)을 칩 단위로 비교해 가장 높은 쪽을 골라요.</p>';
+    $('gBody').innerHTML = '<p class="empty">AI는 행동할 때마다 몬테카를로 시뮬레이션으로 승률을 구하고, 폴드·콜·레이즈의 기대값(EV)을 칩 단위로 비교해 가장 높은 쪽을 골라요. 서로 편먹지 않고 각자 우승을 노려요.</p>';
     $('gPick').innerHTML = '';
     return;
   }
   const max = Math.max(1, ...D.opts.map(o => Math.abs(o.ev)));
-  const sgn = v => (v > 0.05 ? '+' : v < -0.05 ? '−' : '') + Math.abs(v).toFixed(1);
+  const sgn = v => (v > 0.5 ? '+' : v < -0.5 ? '−' : '') + fmt(Math.round(Math.abs(v)));
   $('gBody').innerHTML = `
     <div class="eq"><span class="k">승률</span><b>${pct(D.eq)}</b>${D.tag ? `<span class="tag">${D.tag}</span>` : ''}</div>
     <div class="meter"><i style="width:${D.eq * 100}%"></i>${D.potOdds ? `<em style="left:${D.potOdds * 100}%"><span>팟 오즈 ${pct(D.potOdds)}</span></em>` : ''}</div>
     <dl class="meta">
-      <div><dt>상대 레인지</dt><dd>상위 ${Math.round((1 - D.cut) * 100)}%</dd></div>
+      <div><dt>상대 레인지${D.opps > 1 ? `(${D.opps}명 평균)` : ''}</dt><dd>상위 ${Math.round((1 - D.cut) * 100)}%</dd></div>
       <div><dt>상대 레이즈 빈도</dt><dd>${pct(D.rr)}</dd></div>
       <div><dt>상대 폴드율(관찰)</dt><dd>${D.foldSeen === null ? '—' : pct(D.foldSeen)}</dd></div>
       <div><dt>시뮬레이션</dt><dd>${fmt(D.iters)}회</dd></div>
     </dl>
     <ul class="evs">${D.opts.map(o => `
       <li class="${o === D.pick ? 'on' : ''}">
-        <span>${o.label}${o.type === 'raise' ? `<small>→ ${fmt(o.to)} · <i>폴드 ${Math.round(o.f * 100)}%</i> · <i>콜 시 ${Math.round(o.eqC * 100)}%</i></small>` : ''}</span>
-        <span class="bar">${Math.abs(o.ev) > 0.05 ? `<i class="${o.ev < 0 ? 'neg' : ''}" style="width:${Math.abs(o.ev) / max * 50}%"></i>` : ''}</span>
-        <b class="${o.ev < -0.05 ? 'neg' : ''}">${sgn(o.ev)}</b>
+        <span>${o.label}${o.type === 'raise' ? `<small>→ ${fmt(o.to)} · <i>${D.opps > 1 ? '모두 ' : ''}폴드 ${Math.round(o.f * 100)}%</i> · <i>콜 시 ${Math.round(o.eqC * 100)}%</i></small>` : ''}</span>
+        <span class="bar">${Math.abs(o.ev) > 0.5 ? `<i class="${o.ev < 0 ? 'neg' : ''}" style="width:${Math.abs(o.ev) / max * 50}%"></i>` : ''}</span>
+        <b class="${o.ev < -0.5 ? 'neg' : ''}">${sgn(o.ev)}</b>
       </li>`).join('')}
     </ul>`;
   $('gPick').innerHTML = `<span>${STREET[D.street]} 결정</span><b>${D.pick.label}${D.pick.type === 'raise' ? ' ' + fmt(D.pick.to) : ''}</b>`;
 }
-// 계산 중 헤더에 시뮬레이션 횟수를 올려 보여 준다 (공개 정보)
-function countUp(total) {
-  if (calm) return;
+function countUp(total) { // 계산 중 헤더에 시뮬레이션 횟수를 올려 보여 준다 (공개 정보)
+  if (calm || FAST) return;
   const t0 = performance.now();
-  const tick = t => {
-    if (phase !== 'ai') return;
-    const k = Math.min(1, (t - t0) / 800);
-    $('gState').textContent = `시뮬레이션 ${fmt(Math.round(total * k))}회`;
-    if (k < 1) requestAnimationFrame(tick);
-  };
+  const tick = t => { if (phase !== 'ai') return; const k = Math.min(1, (t - t0) / 600);
+    $('gState').textContent = `시뮬레이션 ${fmt(Math.round(total * k))}회`; if (k < 1) requestAnimationFrame(tick); };
   requestAnimationFrame(tick);
 }
 
-async function aiTurn() {
-  phase = 'ai'; render();
-  await sleep(calm ? 0 : 350);
-  const d = decide(1);
-  H.decision = d.info; render(); countUp(d.info.iters);
-  await sleep(calm ? 100 : 950);
-  const label = act(1, d.type, d.to);
-  say(1, label); log(`컴퓨터: ${label}`); actSound(label);
-  phase = 'deal';
+// ===== 진행 =====
+async function showAction(p, label, paid) {
+  say(p, label); log(`${who(p)}: ${label}`); actSound(label);
+  if (label === '폴드') await muckAnim(p);
+  else if (paid > 0) await chipFly(p, paid);
 }
-
+async function aiTurn(p, me) {
+  phase = 'ai'; render();
+  const quick = G.n > 2, idle = H.folded[0] || G.out[0]; // 내가 빠진 핸드는 템포를 빠르게
+  await sleep(idle ? 120 : quick ? 220 : 350);
+  if (me !== run) return;
+  const d = decide(p);
+  H.decision = d.info; render(); countUp(d.info.iters);
+  await sleep(idle ? 200 : quick ? 480 : 950);
+  if (me !== run) return;
+  const before = G.stacks[p], label = act(p, d.type, d.to);
+  await showAction(p, label, before - G.stacks[p]);
+  phase = 'deal'; render();
+}
 async function advance() {
+  const me = run;
   for (;;) {
+    if (me !== run) return;
     const s = step();
-    if (s === 'end') return onHandEnd();
+    if (s === 'end') return onHandEnd(me);
     if (s === 'deal') {
+      await collectAnim();
       phase = 'deal';
-      const n = H.board.length;
-      log(`${STREET[n]}  ${H.board.slice(n === 3 ? 0 : -1).map(cardText).join(' ')}`, 'street');
-      if (G.stacks[0] && G.stacks[1]) { say(0, ''); say(1, ''); }
+      const k = H.board.length;
+      log(`${STREET[k]}  ${H.board.slice(k === 3 ? 0 : -1).map(cardText).join(' ')}`, 'street');
+      for (const i of live()) if (G.stacks[i]) say(i, '');
       render();
-      await sleep(calm ? 150 : 750);
+      await sleep(live().filter(i => G.stacks[i]).length > 1 ? 650 : 1100); // 올인 런아웃은 한 장씩 천천히
       continue;
     }
-    if (H.toAct === 1) { await aiTurn(); continue; }
+    const p = H.toAct;
+    if (p !== 0) { await aiTurn(p, me); continue; }
     const L = legal(0), sl = $('slider');
     sl.max = L.maxTo; sl.min = L.minTo; sl.value = L.minTo;
     buildPresets();
-    phase = 'player'; render();
+    phase = 'player'; render(); startClock();
     return;
   }
 }
-
-function playerAct(type, to) {
+async function playerAct(type, to) {
   if (phase !== 'player') return;
-  const label = act(0, type, to);
-  say(0, label); log(`나: ${label}`); actSound(label);
-  phase = 'deal'; render();
-  advance();
-}
-
-function onHandEnd() {
-  phase = 'end';
-  const R = H.result, b = R.showdown ? [0, 1].map(p => best5([...H.hole[p], ...H.board])) : null;
-  const tie = R.win.length > 1, who = tie ? '무승부' : `${NAMES[R.win[0]]} 승리`;
-  $('banner').className = 'banner ' + (tie ? 'tie' : R.win[0] === 0 ? 'win' : 'lose');
-  $('banner').innerHTML = `<strong>${who}</strong><span>팟 ${fmt(R.pot)} · ${b ? handName(b[R.win[0]].score) : NAMES[1 - R.win[0]] + ' 폴드'}</span>`;
+  stopClock(); phase = 'busy';
+  const before = G.stacks[0], label = act(0, type, to);
   render();
-  if (b) {
-    [0, 1].forEach(p => $('hname' + p).textContent = handName(b[p].score));
-    const hot = new Set(R.win.flatMap(p => b[p].cards));
-    document.querySelectorAll('.table .card[data-c]').forEach(el => el.classList.add(hot.has(+el.dataset.c) ? 'win' : 'dim'));
-    log(`쇼다운 · 나 ${handName(b[0].score)} / 컴퓨터 ${handName(b[1].score)} (${H.hole[1].map(cardText).join(' ')})`);
-  }
-  log(`${who} · 팟 ${fmt(R.pot)}`, 'result');
-  if (!G.stacks[1]) log('컴퓨터의 칩을 모두 땄어요. 게임 승리!', 'result');
-  else if (!G.stacks[0]) log('칩을 모두 잃었어요. 새 게임에서 다시 도전하세요.', 'result');
-  sfx(tie ? 'chip' : R.win[0] === 0 ? 'win' : 'lose');
-  REC.hands++;
-  if (!tie && R.win[0] === 0) { REC.handsWon++; REC.bestPot = Math.max(REC.bestPot, R.pot); }
-  if (G.stacks.includes(0)) { REC.games++; if (!G.stacks[1]) REC.won++; }
-  store.set('holdem.record', REC); renderRecord();
-  $('bNext').focus({ preventScroll: true });
+  await showAction(0, label, before - G.stacks[0]);
+  phase = 'deal'; render();
+  advance();
 }
 
-async function startHand() {
-  if (!G || G.stacks.includes(0)) { newGame(); $('log').textContent = ''; }
-  newHand();
-  for (const p of [0, 1]) $('hname' + p).textContent = '';
-  say(G.button, 'SB ' + fmt(H.bets[G.button])); say(1 - G.button, 'BB ' + fmt(H.bets[1 - G.button]));
-  log(`핸드 #${G.hand} · 딜러 버튼 ${NAMES[G.button]}`, 'head');
-  phase = 'deal'; render();
-  if (G.hand > 1 && levelOf(G.hand) !== levelOf(G.hand - 1)) {
-    const [sb, bb] = LEVELS[levelOf(G.hand)], el = $('blinds');
-    log(`블라인드 상승 → ${sb}/${bb}`, 'level'); sfx('level');
-    el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+async function onHandEnd(me) {
+  phase = 'end';
+  const R = H.result;
+  await collectAnim();
+  setChipset($('pile'), R.pot, 2, 5, 10); // 정산 전 팟을 그대로 보여 준 채로 연출
+  // 쇼다운: 남은 사람 패를 뒤집고 족보 표시, 메인팟 승자의 5장을 강조
+  const b = R.showdown ? Object.fromEntries(live().map(i => [i, best5([...H.hole[i], ...H.board])])) : null;
+  for (let i = 0; i < G.n; i++) renderHole(i);
+  if (b) {
+    for (const i of live()) $('hname' + i).textContent = handName(b[i].score);
+    const hot = new Set(R.pots[0].win.flatMap(i => b[i].cards));
+    document.querySelectorAll('#board .card, #seats .card[data-c]').forEach(el => el.classList.add(hot.has(+el.dataset.c) ? 'win' : 'dim'));
+    log(`쇼다운 · ${live().map(i => `${who(i)} ${handName(b[i].score)}${i ? ` (${H.hole[i].map(cardText).join(' ')})` : ''}`).join(' / ')}`);
+    await sleep(1300);
+  } else await sleep(300);
+  if (me !== run) return;
+  // 팟 → 승자 (사이드팟이면 팟마다)
+  await payoutAnim(R.pots);
+  for (const i of R.win) $('seat' + i).classList.add('win');
+  for (let i = 0; i < G.n; i++) countStack(i);
+  const heroWon = R.win.includes(0), tie = R.win.length > 1 && R.pots.length === 1;
+  sfx(heroWon ? (tie ? 'chip' : 'win') : H.folded[0] ? 'chip' : 'lose');
+  const main = R.pots[0], names = main.win.map(who).join(' · ');
+  $('banner').className = 'banner ' + (main.win.includes(0) ? (main.win.length > 1 ? 'tie' : 'win') : 'lose');
+  $('banner').innerHTML = `<strong>${main.win.length > 1 ? `${names} 나눠 가짐` : `${names} 승리`}</strong><span>팟 ${fmt(R.pot)} · ${
+    b ? handName(b[main.win[0]].score) : '모두 폴드'}${R.pots.length > 1 ? ` · 사이드팟 ${R.pots.length - 1}개` : ''}</span>`;
+  R.pots.forEach((p, k) => log(`${k ? `사이드팟 ${k}` : '팟'} ${fmt(p.amt)} → ${p.win.map(who).join(' · ')}`, 'result'));
+  // 탈락
+  for (const i of H.busted) {
+    const bd = $('badge' + i); bd.hidden = false; bd.textContent = `${G.place[i]}위`;
+    $('seat' + i).classList.add('out');
+    log(`${who(i)} 탈락 · ${G.place[i]}위`, 'level');
   }
-  await sleep(calm ? 0 : 600);
+  if (G.n === 2) { REC.hands++; if (heroWon && !tie) { REC.handsWon++; REC.bestPot = Math.max(REC.bestPot, R.pot); } store.set('holdem.record', REC); }
+  render();
+  if (G.out[0] || alive().length === 1) { await sleep(1400); if (me === run) endTournament(!G.out[0]); return; }
+  autoNext(H.folded[0] ? 2 : 4);
+}
+function autoNext(sec) { // 다음 핸드는 잠시 뒤 자동으로 (버튼을 누르면 바로)
+  clearInterval(nextTimer);
+  let left = FAST ? 0 : sec;
+  const tick = () => { if (left <= 0) { clearInterval(nextTimer); startHand(); return; } $('bNext').textContent = `다음 핸드 (${left--})`; };
+  nextTimer = setInterval(tick, 1000); // 타이머를 먼저 잡아야 0초일 때 두 번 시작하지 않는다
+  tick();
+}
+async function startHand(fresh = false) {
+  clearInterval(nextTimer);
+  if (!fresh && phase !== 'end') return; // 핸드가 끝난 뒤에만 다음 핸드 (중복 시작 방지)
+  const me = run;
+  newHand();
+  for (let i = 0; i < G.n; i++) { say(i, ''); $('hname' + i).textContent = ''; $('seat' + i).classList.remove('win'); }
+  document.querySelectorAll('.bio').forEach(x => x.remove());
+  $('board').textContent = ''; $('board')._cards = [];
+  log(`핸드 #${G.hand} · 딜러 버튼 ${who(G.button)}`, 'head');
+  phase = 'deal'; dealing = true;
+  moveDealer(); render();
+  if (G.hand > 1 && levelOf(G.hand) !== levelOf(G.hand - 1)) {
+    const [sb, bb] = LEVELS[levelOf(G.hand)];
+    flashBanner(`블라인드 상승`, `레벨 ${levelOf(G.hand) + 1} · ${fmt(sb)}/${fmt(bb)}`);
+    log(`블라인드 상승 → ${fmt(sb)}/${fmt(bb)}`, 'level'); sfx('level');
+    const el = $('blinds'); el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+  }
+  say(H.sbSeat, 'SB ' + fmt(H.bets[H.sbSeat])); say(H.bbSeat, 'BB ' + fmt(H.bets[H.bbSeat]));
+  await dealAnim();
+  dealing = false;
+  if (me !== run) return;
+  await sleep(250);
   advance();
+}
+
+// ===== 로비·결과 =====
+function start(m) {
+  run++; stopClock(); clearInterval(nextTimer);
+  mode = m;
+  const n = m === 'hu' ? 2 : m === 'ft6' ? 6 : 9;
+  if (n === 2) { newGame({ names: ['나', '컴퓨터'], styles: [null, 'pro'], stacks: [20000, 20000], hpl: 10 }); bios = ['', '']; }
+  else {
+    const names = shuffle(NAME_POOL.slice()).slice(0, n - 1), ps = names.map(persona);
+    const st = Array.from({ length: n }, () => (16 + Math.floor(Math.random() * 33)) * 500).sort((a, b) => a - b); // 8,000~24,000칩
+    const mine = st.splice(n >> 1, 1)[0]; shuffle(st); // 나는 중간 정도 스택
+    newGame({ names: ['나', ...names], styles: [null, ...ps.map(p => p.style)], stacks: [mine, ...st], hpl: 6 });
+    bios = ['', ...ps.map(p => p.bio)];
+  }
+  G.timeChips = TIME_CHIPS;
+  $('modeName').textContent = n === 2 ? '헤즈업 홀덤' : `파이널 테이블 ${n}인`;
+  $('modeSub').textContent = n === 2 ? '노리밋 · vs EV 컴퓨터' : '노리밋 토너먼트 · 우승을 노려라';
+  $('lobby').hidden = true; $('endModal').hidden = true;
+  $('log').textContent = '';
+  buildTable(); renderRecord();
+  if (n > 2) { log(`파이널 테이블 ${n}인 · 레벨마다 ${G.hpl}핸드`, 'head'); for (let i = 1; i < n; i++) log(`${who(i)} (${G.styles[i].tag}) · ${bios[i]} · ${fmt(G.stacks[i])}칩`, 'street'); }
+  phase = 'deal';
+  startHand(true);
+}
+function endTournament(won) {
+  stopClock(); clearInterval(nextTimer); phase = 'over';
+  const place = won ? 1 : G.place[0], n = G.n;
+  if (n === 2) { REC.games++; if (won) REC.won++; store.set('holdem.record', REC); }
+  else { const r = RFT[n]; r.games++; if (won) r.wins++; r.best = r.best ? Math.min(r.best, place) : place; r.sum += place; store.set('holdem.record.ft', RFT); }
+  renderRecord();
+  $('endTitle').textContent = won ? (n === 2 ? '완승!' : '우승!') : n === 2 ? '패배' : `${place}위로 탈락`;
+  $('endSub').textContent = won ? `${n === 2 ? '컴퓨터의 칩을 모두 땄어요' : `${n}명 중 마지막까지 살아남았어요`} · ${G.hand}핸드` : `${G.hand}핸드 · 레벨 ${levelOf(G.hand) + 1}`;
+  const rows = G.names.map((nm, i) => ({ i, nm, place: G.place[i] })).sort((a, b) => (a.place ?? 0) - (b.place ?? 0));
+  $('standings').innerHTML = rows.map(r => `<li class="${r.i ? '' : 'me'}"><span>${r.place ? r.place + '위' : '진행 중'}</span><span>${r.nm}${r.i && n > 2 ? ` · ${G.styles[r.i].tag}` : ''}</span><span>${r.place ? '' : fmt(G.stacks[r.i]) + '칩'}</span></li>`).join('');
+  $('endModal').hidden = false;
+  sfx(won ? 'win' : 'lose');
+  if (won) chipRain();
+  render();
+}
+function chipRain() { // 우승 축하: 칩이 쏟아진다
+  if (calm) return;
+  for (let k = 0; k < 36; k++) {
+    const img = new Image(), d = pickOne(DENOMS), x = Math.random() * innerWidth;
+    img.src = `assets/chips/chip-${d}-${k % 2}.png`; img.style.width = 26 + Math.random() * 18 + 'px';
+    fly(img, { x, y: -40 }, { x: x + (Math.random() - 0.5) * 160, y: innerHeight + 40 }, { dur: 1600 + Math.random() * 1200, rot: (Math.random() - 0.5) * 720, delay: k * 45 });
+  }
+}
+function showLobby() {
+  run++; stopClock(); clearInterval(nextTimer); phase = 'lobby';
+  $('endModal').hidden = true; $('lobby').hidden = false;
+  $('lr-hu').textContent = REC.games ? `${REC.won}승 ${REC.games - REC.won}패` : '';
+  for (const n of [6, 9]) { const r = RFT[n]; $('lr-ft' + n).textContent = r.games ? `${r.games}판 · 우승 ${r.wins}회 · 최고 ${r.best}위` : ''; }
+}
+function renderRecord() {
+  if (!G || G.n === 2) {
+    $('rL1').textContent = '게임'; $('r1').textContent = `${REC.won}승 ${REC.games - REC.won}패`;
+    $('rL2').textContent = '핸드 승률'; $('r2').innerHTML = REC.hands ? `${Math.round(REC.handsWon / REC.hands * 100)}%<small>${REC.handsWon}/${REC.hands}</small>` : '—';
+    $('rL3').textContent = '최대로 딴 팟'; $('r3').textContent = REC.bestPot ? fmt(REC.bestPot) : '—';
+  } else {
+    const r = RFT[G.n];
+    $('rL1').textContent = `${G.n}인 토너먼트`; $('r1').innerHTML = `${r.games}판<small>우승 ${r.wins}</small>`;
+    $('rL2').textContent = '최고 순위'; $('r2').textContent = r.best ? `${r.best}위` : '—';
+    $('rL3').textContent = '평균 순위'; $('r3').textContent = r.games ? `${(r.sum / r.games).toFixed(1)}위` : '—';
+  }
+}
+function renderSound() {
+  $('bSound').textContent = soundOn ? '소리 끄기' : '소리 켜기'; // 누르면 일어날 일을 쓴다
+  $('bSound').setAttribute('aria-pressed', soundOn);
 }
 
 $('bFold').onclick = () => playerAct('fold');
@@ -860,13 +1350,24 @@ $('slider').oninput = raiseLabel;
 const nudge = d => { $('slider').value = +$('slider').value + d * H.bb; raiseLabel(); }; // 범위 밖이면 슬라이더가 알아서 끝값으로 맞춘다
 $('bMinus').onclick = () => nudge(-1);
 $('bPlus').onclick = () => nudge(1);
-$('bNext').onclick = startHand;
+$('bNext').onclick = () => startHand();
 $('cheat').onchange = renderGauge;
 $('bSound').onclick = () => { soundOn = !soundOn; store.set('holdem.sound.v2', soundOn); renderSound(); sfx('chip'); };
+document.querySelectorAll('.mode').forEach(b => b.onclick = () => start(b.dataset.mode));
+$('bAgain').onclick = () => start(mode);
+$('bToLobby').onclick = showLobby;
+let lobbyArm = null; // 게임 중 로비 버튼은 두 번 눌러야 나간다
+$('bLobby').onclick = () => {
+  const b = $('bLobby');
+  if (phase === 'lobby' || phase === 'over' || lobbyArm) { clearTimeout(lobbyArm); lobbyArm = null; b.textContent = '로비'; b.classList.remove('warn'); showLobby(); return; }
+  b.textContent = '한 번 더 누르면 나가요'; b.classList.add('warn');
+  lobbyArm = setTimeout(() => { lobbyArm = null; b.textContent = '로비'; b.classList.remove('warn'); }, 3000);
+};
+addEventListener('resize', () => G && placeSeats());
 
-renderSound(); renderRecord();
-startHand();
-if (new URLSearchParams(location.search).has('test')) {
+renderSound(); renderRecord(); showLobby();
+if (Q.has('mode')) start(Q.get('mode')); // 확인용: ?mode=ft6 로 바로 시작
+if (Q.has('test')) {
   const t = selfTest();
   console.log('selfTest', t);
   log(t.fails.length ? `셀프 테스트 실패: ${t.fails.join(', ')}` : `셀프 테스트 ${t.total}개 모두 통과`, 'result');
