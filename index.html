@@ -279,6 +279,9 @@ button:disabled{cursor:not-allowed}
 .mp-err{min-height:20px; margin:6px 0; color:var(--neg); font-size:13px; text-align:center}
 .mp-code{font:24px var(--mono); letter-spacing:.12em; color:var(--brass)}
 #mpBody .standings{margin-top:10px}
+.steps{margin:0 0 14px; padding-left:22px; display:grid; gap:10px; font-size:15px; line-height:1.5} .steps b{color:var(--brass)}
+.share-ico{width:18px; height:18px; vertical-align:-3px; margin:0 2px; color:var(--brass)}
+.sheet .note{margin:0 0 16px; font-size:12px; color:var(--muted); text-align:center}
 
 @keyframes deal{from{opacity:0; transform:translateY(-26px) rotate(-8deg) scale(.92)}}
 @keyframes flip{from{transform:perspective(600px) rotateY(90deg)}}
@@ -385,6 +388,19 @@ button:disabled{cursor:not-allowed}
     <p id="endSub"></p>
     <ol class="standings" id="standings"></ol>
     <div class="row"><button class="btn primary" id="bAgain">다시 하기</button><button class="btn" id="bToLobby">로비로</button></div>
+  </div>
+</div>
+<div class="overlay" id="iosInstall" hidden>
+  <div class="sheet">
+    <h2>홈 화면에 추가</h2>
+    <p>아이폰·아이패드는 사파리 메뉴로 설치해요</p>
+    <ol class="steps">
+      <li>공유 버튼 <svg class="share-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="공유"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M8 10H6a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-2"/></svg>을 누르세요. 안 보이면 주소창 옆 <b>⋯</b> 안에 있어요</li>
+      <li>목록을 내려 <b>홈 화면에 추가</b>를 누르세요</li>
+      <li><b>웹 앱으로 열기</b>가 보이면 켜 두고 <b>추가</b>를 누르세요</li>
+    </ol>
+    <p class="note">홈 화면의 ‘홀덤’으로 열면 전체 화면이에요. 사파리와 저장 공간이 따로라 친구와 치기 닉네임은 한 번 더 정해요</p>
+    <button class="btn wide" id="bIosClose">확인</button>
   </div>
 </div>
 <div id="fx"></div>
@@ -1101,10 +1117,16 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 let installEvt = null;
 const showInstall = on => document.querySelectorAll('.install').forEach(b => b.hidden = !on);
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; showInstall(true); });
+// 아이폰·아이패드는 사이트가 설치 창을 띄울 수 없다 → 버튼을 보여 주고 누르면 '홈 화면에 추가' 방법을 안내 (아이패드는 맥으로 자신을 알린다)
+const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || /Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1;
+const INSTALLED = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+if (IOS && !INSTALLED && (location.protocol === 'https:' || location.hostname === 'localhost') && !/claude/.test(location.hostname)) showInstall(true);
 document.querySelectorAll('.install').forEach(b => b.onclick = async () => {
-  if (!installEvt) return;
+  if (!installEvt) { if (IOS) $('iosInstall').hidden = false; return; }
   installEvt.prompt(); await installEvt.userChoice; installEvt = null; showInstall(false);
 });
+$('bIosClose').onclick = () => { $('iosInstall').hidden = true; };
+$('iosInstall').onclick = e => { if (e.target === $('iosInstall')) $('iosInstall').hidden = true; };
 addEventListener('appinstalled', () => { showInstall(false); log('앱으로 설치했어요', 'level'); });
 
 // ===== 친구와 치기: 필요할 때만 Supabase 라이브러리와 mp.js를 불러온다 (claude.ai 안에서는 외부 접속이 막혀 숨긴다) =====
