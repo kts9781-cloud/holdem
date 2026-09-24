@@ -44,7 +44,7 @@ function mpNick(code) {
     try { const r = await mpCall('profile', { nickname: $('mpNick').value }); code ? mpJoin(code) : mpMenu(r.nickname); }
     catch (e) { sheetErr(e.message); }
   };
-  $('mpNickOk').onclick = go; $('mpNick').onkeydown = e => e.key === 'Enter' && go(); if (matchMedia('(pointer: fine)').matches) $('mpNick').focus(); // iOS는 자동 포커스하면 탭해도 키보드가 안 뜬다
+  $('mpNickOk').onclick = go; $('mpNick').onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) go(); }; // false를 돌려주면 모든 키 입력이 취소된다 if (matchMedia('(pointer: fine)').matches) $('mpNick').focus(); // iOS는 자동 포커스하면 탭해도 키보드가 안 뜬다
 }
 function mpMenu(nick) {
   sheet(`<h2>친구와 치기</h2><p>${nick ? esc(nick) + ' 님, ' : ''}방을 만들거나 코드로 들어가세요. 빈자리는 AI가 채워요</p>
@@ -56,7 +56,7 @@ function mpMenu(nick) {
     try { const r = await mpCall('create', { seats: +b.dataset.seats }); MP.id = r.id; MP.code = r.code; mpWait(); } catch (e) { sheetErr(e.message); }
   });
   $('mpJoinBtn').onclick = () => mpJoin($('mpCode').value);
-  $('mpCode').onkeydown = e => e.key === 'Enter' && mpJoin($('mpCode').value);
+  $('mpCode').onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) mpJoin($('mpCode').value); };
 }
 async function mpJoin(code) {
   try {
