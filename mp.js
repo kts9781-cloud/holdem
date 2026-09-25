@@ -127,7 +127,8 @@ function mpClose() { mpUnsubWait(); $('mpSheet').hidden = true; showLobby(); }
 async function mpEnterGame() {
   run++; stopClock(); clearInterval(nextTimer); clearInterval(tourTimer);
   mode = 'mp';
-  const { data: T } = await sb.from('tables').select('public, seq, status').eq('id', MP.id).single();
+  const { data: T } = await sb.from('tables').select('public, seq, status, host').eq('id', MP.id).single();
+  MP.host = T.host; $('bDelRoom').hidden = T.host !== MP.me; // 방장은 게임 화면에서 바로 방을 지울 수 있다
   const P = T.public;
   MP.n = P.n; MP.users = P.users; MP.seat = P.users.indexOf(MP.me); MP.lastSeq = T.seq; MP.queue = [];
   MP.deadline = P.deadline; MP.nextHandAt = P.nextHandAt; MP.skew = null;
@@ -233,7 +234,7 @@ async function mpTimeChip() {
 async function mpBack() { try { await mpCall('back', { id: MP.id }); mpPoll(); } catch (e) { log(e.message, 'level'); } }
 async function mpLeave() { // 게임 중 나가기 = 자리 비움 (코드나 링크로 다시 들어오면 이어서)
   if (MP.id && phase !== 'over') { try { await mpCall('leave', { id: MP.id }); } catch {} }
-  mpUnsub(); mode = 'hu'; $('cheat').disabled = false;
+  mpUnsub(); mode = 'hu'; $('cheat').disabled = false; $('bDelRoom').hidden = true;
 }
 
 async function mpApply(e) {
@@ -392,9 +393,17 @@ function mpRebuyAsk() {
     catch (e) { sheetErr(e.message); $('rbYes').disabled = $('rbNo').disabled = false; } };
   $('rbYes').onclick = () => go(true); $('rbNo').onclick = () => go(false);
 }
-function mpGone() { // 방장이 방을 지웠다
-  stopClock(); clearInterval(nextTimer); clearInterval(tourTimer); clearInterval(MP.rbTimer); mpUnsub(); phase = 'over';
+function mpGone(sub = '방장이 방을 지웠어요') { // 방이 없어졌다
+  $('bDelRoom').hidden = true; stopClock(); clearInterval(nextTimer); clearInterval(tourTimer); clearInterval(MP.rbTimer); mpUnsub(); phase = 'over';
   $('mpSheet').hidden = true;
-  $('endTitle').textContent = '방이 닫혔어요'; $('endSub').textContent = '방장이 방을 지웠어요'; $('standings').innerHTML = '';
+  $('endTitle').textContent = '방이 닫혔어요'; $('endSub').textContent = sub; $('standings').innerHTML = '';
   $('bAgain').hidden = true; $('endModal').hidden = false;
 }
+// 게임 중 방장이 방을 지운다 (두 번 눌러야 지운다). 친구들 화면은 다음 차례 확인 때 '방이 닫혔어요'
+let delArm = null;
+$('bDelRoom').onclick = () => {
+  const b = $('bDelRoom');
+  if (!delArm) { b.textContent = '한 번 더 누르면 방이 사라져요'; b.classList.add('warn'); delArm = setTimeout(() => { delArm = null; b.textContent = '방 삭제'; b.classList.remove('warn'); }, 3000); return; }
+  clearTimeout(delArm); delArm = null; b.textContent = '방 삭제'; b.classList.remove('warn');
+  mpCall('remove', { id: MP.id }).then(() => mpGone('방을 지웠어요'), e => log(e.message, 'level'));
+};
