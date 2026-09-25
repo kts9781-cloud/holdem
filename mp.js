@@ -103,11 +103,19 @@ async function mpWait() {
     if (key === MP.waitKey) return; // 바뀐 게 없으면 그대로 (다시 그리면 그 순간의 탭이 사라진다)
     MP.waitKey = key;
     sheet(`<h2>대기실</h2><p>코드 <b class="mp-code">${MP.code}</b> · ${ps.length}/${T.seats}명${T.ai ? '' : ' · 사람끼리'}${T.rebuys ? ` · 리바인 ${rbText(T.rebuys)}` : ''}</p>
+      <button class="btn primary wide" id="mpShare" style="margin-bottom:10px">친구 초대하기<small>카톡·문자로 초대 링크 보내기</small></button>
       <div class="mp-link"><input class="mp-input" readonly value="${esc(link)}"><button class="btn" id="mpCopy">링크 복사</button></div>
       <ol class="standings">${Array.from({ length: T.seats }, (_, s) => { const p = ps.find(x => x.seat === s);
         return `<li class="${p && p.user_id === MP.me ? 'me' : ''}"><span>${s + 1}번</span><span>${p ? esc(p.nickname) + (p.user_id === T.host ? ' · 방장' : '') : T.ai ? 'AI가 채울 자리' : '빈자리'}</span><span></span></li>`; }).join('')}</ol>
       <p class="mp-err" id="mpErr"></p>
       <div class="row">${T.host === MP.me ? '<button class="btn primary" id="mpStart">시작하기</button>' : '<button class="btn" disabled>방장이 시작하길 기다리는 중…</button>'}<button class="btn" onclick="mpClose()">나가기</button></div>`);
+    // 휴대폰은 공유창(카톡 선택), 공유창이 없으면 초대 문구+링크를 복사
+    const nick = ps.find(p => p.user_id === MP.me)?.nickname, invite = `${nick ? nick + ' 님이 ' : ''}홀덤 방에 초대했어요 · 코드 ${MP.code}`;
+    $('mpShare').onclick = async () => {
+      if (navigator.share) { try { await navigator.share({ title: '홀덤 한 판 같이 쳐요', text: invite, url: link }); } catch {} return; } // 취소해도 그대로
+      try { await navigator.clipboard.writeText(`${invite}\n${link}`); $('mpShare').innerHTML = '초대 문구를 복사했어요<small>카톡 대화방에 붙여 넣어 보내세요</small>'; }
+      catch { $('mpShare').innerHTML = '아래 링크를 길게 눌러 복사하세요<small>카톡 대화방에 붙여 넣어 보내세요</small>'; }
+    };
     $('mpCopy').onclick = async () => { try { await navigator.clipboard.writeText(link); $('mpCopy').textContent = '복사했어요'; } catch { $('mpCopy').textContent = '길게 눌러 복사'; } };
     if ($('mpStart')) $('mpStart').onclick = async () => { try { $('mpStart').disabled = true; await mpCall('start', { id: MP.id }); } catch (e) { sheetErr(e.message); $('mpStart').disabled = false; } };
   };
