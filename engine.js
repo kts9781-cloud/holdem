@@ -232,11 +232,21 @@ function settle() {
   H.result = { pots, win: [...new Set(pots.flatMap(p => p.win))], pot: total, showdown: lv.length > 1, score };
   H.committed.fill(0); H.bets.fill(0);
   // 탈락: 같은 핸드에서 여럿이 떨어지면 핸드 시작 때 칩이 많았던 사람이 더 높은 순위
+  // 리바인(친구와 치기)할 수 있는 사람은 순위 없이 '고민 중'(pending)으로 두고, 그만할 때 순위를 매긴다
   const bust = alive().filter(i => G.stacks[i] === 0).sort((a, b) => H.start[b] - H.start[a]);
-  const remain = alive().length - bust.length;
-  bust.forEach((i, k) => { G.out[i] = true; G.place[i] = remain + 1 + k; });
-  if (alive().length === 1) G.place[alive()[0]] = 1;
+  const gone = bust.filter(i => !canRebuy(i));
+  bust.forEach(i => { G.out[i] = true; if (canRebuy(i)) G.pending[i] = true; });
+  const remain = alive().length + pendingCount();
+  gone.forEach((i, k) => { G.place[i] = remain + 1 + k; });
+  if (alive().length === 1 && !pendingCount()) G.place[alive()[0]] = 1;
   H.busted = bust;
+}
+const canRebuy = i => !!G.rebuyOpen && G.rebuysLeft?.[i] != null && G.rebuysLeft[i] !== 0; // -1 = 무제한
+const pendingCount = () => G.pending ? G.pending.filter(Boolean).length : 0;
+function rebuy(i, stack) { G.pending[i] = false; G.out[i] = false; G.stacks[i] = stack; if (G.rebuysLeft[i] > 0) G.rebuysLeft[i]--; } // 다음 핸드부터
+function quitPending(i) { // 리바인 안 함 → 아직 안 끝난 사람 수 + 1 위
+  G.pending[i] = false; G.place[i] = alive().length + pendingCount() + 1;
+  if (alive().length === 1 && !pendingCount()) G.place[alive()[0]] = 1;
 }
 // 한 단계 진행: 'act'(H.toAct 차례) | 'deal'(카드 깔림) | 'end'(정산 완료)
 function step() {
@@ -360,6 +370,19 @@ function selfTest() {
     ['폴드한 사람의 칩도 팟에 남는다', () => { const r = pot([0, 500, 0], [400, 400, 200], [false, false, true],
       ['As Ad', '7c 2h', 'Ks Kd'], 'Ah Kh 5c 3d 8s');
       return r.stacks.join() === '1000,500,0'; }],
+    // 4명: 1(리바인 가능)과 2(불가)가 같은 핸드에 탈락 → 2는 바로 4위, 1은 고민 중 → 그만하면 3위. 리바인하면 다시 살아난다
+    ['리바인: 고민 중은 순위 보류, 그만하면 다음 순위', () => {
+      const saved = [G, H];
+      G = { n: 4, stacks: [3000, 0, 0, 500], out: [false, false, false, false], place: [null, null, null, null], button: 0, hand: 1, level: 0, stats: [],
+            rebuyOpen: true, rebuysLeft: [2, 2, null, null], pending: [false, false, false, false] };
+      H = { committed: [0, 1000, 1000, 1000], bets: [0, 0, 0, 0], folded: [true, false, false, false], hole: [[], ...['7c 2h', '8d 3s', 'As Ad'].map(h => h.split(' ').map(card))],
+            board: 'Kh Qd 9c 5s 4h'.split(' ').map(card), start: [3000, 1000, 1000, 1500] };
+      settle();
+      const a = G.pending[1] && G.place[1] === null && G.place[2] === 4;
+      quitPending(1); const b = G.place[1] === 3 && !G.pending[1];
+      G.pending[1] = true; G.place[1] = null; rebuy(1, 20000); const c = !G.out[1] && G.stacks[1] === 20000 && G.rebuysLeft[1] === 1;
+      [G, H] = saved;
+      return a && b && c; }],
   ];
   return { total: cases.length, fails: cases.filter(([, f]) => { try { return !f(); } catch (e) { return true; } }).map(([n]) => n) };
 }

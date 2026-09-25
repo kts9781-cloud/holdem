@@ -51,15 +51,33 @@ function mpNick(code) {
 function mpMenu(nick) {
   sheet(`<h2>친구와 치기</h2><p>${nick ? esc(nick) + ' 님, ' : ''}방을 만들거나 코드로 들어가세요</p>
     <label class="toggle mp-ai"><input type="checkbox" id="mpAI" checked>빈자리는 AI로 채우기</label>
+    <label class="mp-opt">리바인 (처음 30분, 사람만) <select id="mpRebuy">${[0, 2, 3, 5, -1].map(n => `<option value="${n}">${rbText(n)}</option>`).join('')}</select></label>
     <div class="mp-seats">${[2, 6, 9].map(n => `<button class="mode" data-seats="${n}"><b>${n === 2 ? '1:1 헤즈업' : `${n}인 테이블`}</b><span>${n === 2 ? '친구와 둘이' : `최대 ${n}명`}</span></button>`).join('')}</div>
     <div class="mp-join"><input class="mp-input" id="mpCode" maxlength="6" placeholder="초대 코드 6자리" autocapitalize="characters"><button class="btn primary" id="mpJoinBtn">참가</button></div>
     <p class="mp-err" id="mpErr"></p>
+    <ul class="mp-rooms" id="mpRooms"></ul>
     <button class="btn wide ghost" onclick="mpClose()">돌아가기</button>`);
   document.querySelectorAll('[data-seats]').forEach(b => b.onclick = async () => {
-    try { const r = await mpCall('create', { seats: +b.dataset.seats, ai: $('mpAI').checked }); MP.id = r.id; MP.code = r.code; mpWait(); } catch (e) { sheetErr(e.message); }
+    try { const r = await mpCall('create', { seats: +b.dataset.seats, ai: $('mpAI').checked, rebuys: +$('mpRebuy').value }); MP.id = r.id; MP.code = r.code; mpWait(); } catch (e) { sheetErr(e.message); }
   });
+  mpRooms();
   $('mpJoinBtn').onclick = () => mpJoin($('mpCode').value);
   $('mpCode').onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) mpJoin($('mpCode').value); };
+}
+// 내가 들어가 있는 방 (끝나지 않은 것): 다시 들어가기, 방장이면 삭제 (두 번 눌러야 지운다)
+async function mpRooms() {
+  const { data } = await sb.from('table_players').select('table_id, tables(code, status, seats, host, created_at)').eq('user_id', MP.me);
+  const rooms = (data ?? []).filter(r => r.tables && r.tables.status !== 'finished').map(r => ({ id: r.table_id, ...r.tables }))
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const ul = $('mpRooms'); if (!ul) return;
+  ul.innerHTML = rooms.map(t => `<li><span><b>${esc(t.code)}</b>${t.status === 'waiting' ? '대기 중' : '진행 중'} · ${t.seats}인${t.host === MP.me ? ' · 방장' : ''}</span>
+    <button class="btn" data-enter="${esc(t.code)}">들어가기</button>${t.host === MP.me ? `<button class="btn ghost" data-del="${t.id}">삭제</button>` : ''}</li>`).join('');
+  ul.querySelectorAll('[data-enter]').forEach(b => b.onclick = () => mpJoin(b.dataset.enter));
+  ul.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+    if (!b.classList.contains('warn')) { b.textContent = '정말 삭제'; b.classList.add('warn'); setTimeout(() => { b.textContent = '삭제'; b.classList.remove('warn'); }, 3000); return; }
+    b.disabled = true;
+    try { await mpCall('remove', { id: b.dataset.del }); sheetErr(''); mpRooms(); } catch (e) { sheetErr(e.message); b.disabled = false; }
+  });
 }
 async function mpJoin(code) {
   try {
@@ -74,14 +92,17 @@ async function mpJoin(code) {
 async function mpWait() {
   const link = `${location.origin}${location.pathname}?room=${MP.code}`;
   const draw = async () => {
-    const { data: T } = await sb.from('tables').select('host, seats, status, ai').eq('id', MP.id).single();
+    const { data: T } = await sb.from('tables').select('host, seats, status, ai, rebuys').eq('id', MP.id).maybeSingle();
+    if (gen !== MP.waitGen) return;
+    if (!T) { mpUnsubWait(); mpMenu(''); sheetErr('방장이 방을 지웠어요'); return; }
     if (T.status !== 'waiting') { mpUnsubWait(); return mpEnterGame(); }
     const { data: ps } = await sb.from('table_players').select('seat, user_id, nickname').eq('table_id', MP.id).order('seat');
+    if (gen !== MP.waitGen) return; // 그사이 대기실을 닫았다 (늦게 온 응답이 화면을 되살리지 않게)
     MP.host = T.host;
     const key = JSON.stringify([T, ps]);
     if (key === MP.waitKey) return; // 바뀐 게 없으면 그대로 (다시 그리면 그 순간의 탭이 사라진다)
     MP.waitKey = key;
-    sheet(`<h2>대기실</h2><p>코드 <b class="mp-code">${MP.code}</b> · ${ps.length}/${T.seats}명${T.ai ? '' : ' · 사람끼리'}</p>
+    sheet(`<h2>대기실</h2><p>코드 <b class="mp-code">${MP.code}</b> · ${ps.length}/${T.seats}명${T.ai ? '' : ' · 사람끼리'}${T.rebuys ? ` · 리바인 ${rbText(T.rebuys)}` : ''}</p>
       <div class="mp-link"><input class="mp-input" readonly value="${esc(link)}"><button class="btn" id="mpCopy">링크 복사</button></div>
       <ol class="standings">${Array.from({ length: T.seats }, (_, s) => { const p = ps.find(x => x.seat === s);
         return `<li class="${p && p.user_id === MP.me ? 'me' : ''}"><span>${s + 1}번</span><span>${p ? esc(p.nickname) + (p.user_id === T.host ? ' · 방장' : '') : T.ai ? 'AI가 채울 자리' : '빈자리'}</span><span></span></li>`; }).join('')}</ol>
@@ -91,6 +112,7 @@ async function mpWait() {
     if ($('mpStart')) $('mpStart').onclick = async () => { try { $('mpStart').disabled = true; await mpCall('start', { id: MP.id }); } catch (e) { sheetErr(e.message); $('mpStart').disabled = false; } };
   };
   mpUnsubWait();
+  const gen = MP.waitGen;
   MP.waitCh = sb.channel('wait-' + MP.id)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'table_players', filter: `table_id=eq.${MP.id}` }, draw)
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tables', filter: `id=eq.${MP.id}` }, draw)
@@ -98,7 +120,7 @@ async function mpWait() {
   MP.waitPoll = setInterval(draw, 4000); // 실시간이 끊겨도 따라오게
   draw();
 }
-function mpUnsubWait() { if (MP.waitCh) sb.removeChannel(MP.waitCh); MP.waitCh = null; clearInterval(MP.waitPoll); MP.waitKey = null; }
+function mpUnsubWait() { if (MP.waitCh) sb.removeChannel(MP.waitCh); MP.waitCh = null; clearInterval(MP.waitPoll); MP.waitKey = null; MP.waitGen = (MP.waitGen || 0) + 1; }
 function mpClose() { mpUnsubWait(); $('mpSheet').hidden = true; showLobby(); }
 
 // ===== 게임 =====
@@ -118,6 +140,7 @@ async function mpEnterGame() {
         folded: rot(P.folded), canRaise: rot(P.canRaise), lastRaise: P.lastRaise, toAct: P.toAct >= 0 ? L(P.toAct) : -1, bb: P.bb, sb: P.sb,
         sbSeat: L(P.sbSeat), bbSeat: L(P.bbSeat), result: null, decision: null, busted: [] };
   if (P.show) { for (const [ss, cards] of Object.entries(P.show)) H.hole[L(+ss)] = cards; H.shown = true; }
+  Object.assign(G, rebuyOf(P));
   bios = Array(P.n).fill('');
   $('mpSheet').hidden = true; $('lobby').hidden = true; $('endModal').hidden = true;
   $('modeName').textContent = '친구와 치기'; $('modeSub').textContent = `코드 ${MP.code} · ${P.names.filter(Boolean).length}명`;
@@ -134,6 +157,7 @@ async function mpEnterGame() {
   tourTimer = setInterval(renderBlinds, 1000);
   mpSubscribe();
   if (P.phase === 'over') mpEnd({ place: P.place, styles: P.styles });
+  else if (G.pending?.[0]) mpRebuyAsk();
 }
 async function mpMyCards(hand) {
   for (let i = 0; i < 5; i++) {
@@ -183,10 +207,11 @@ function mpWatch() {
   const now = serverNow();
   if (mode !== 'mp' || MP.pumping || MP.queue.length || now < MP.tickAt) return;
   const due = (phase === 'player' || phase === 'wait') && MP.deadline && now > MP.deadline + 800
-           || phase === 'end' && MP.nextHandAt && now > MP.nextHandAt + 300;
+           || phase === 'end' && MP.nextHandAt && now > MP.nextHandAt + 300
+           || G?.pending?.[0] && now > G.rebuyUntil[0] + 800;
   if (!due) return;
   MP.tickAt = now + 1500;
-  mpCall('tick', { id: MP.id }).then(mpPoll, () => {});
+  mpCall('tick', { id: MP.id }).then(mpPoll, e => { if (/찾을 수 없어요/.test(e.message)) mpGone(); });
 }
 function mpClock() { startClock(MP.deadline - serverNow()); }
 function mpMyTurn() {
@@ -264,6 +289,19 @@ async function mpApply(e) {
       phase = 'deal'; render(); // 보드는 다음 deal 이벤트에서
       return revealRunout();
     }
+    case 'rebuy':
+      snap(); Object.assign(G, rebuyOf(e));
+      $('badge' + s).hidden = true; $('seat' + s).classList.remove('out');
+      log(`${who(s)} 리바인 · 시작 칩으로 다음 핸드부터 (남은 ${rbText(G.rebuysLeft[s])})`, 'level'); sfx('chip');
+      if (s === 0) $('mpSheet').hidden = true;
+      render(); return;
+    case 'quit': {
+      G.place = rot(e.place); Object.assign(G, rebuyOf(e));
+      const bd = $('badge' + s); bd.hidden = false; bd.textContent = `${G.place[s]}위`;
+      log(`${who(s)} ${e.auto ? '리바인 안 함 (시간 초과)' : '그만하기'} · ${G.place[s]}위`, 'level');
+      if (s === 0) $('mpSheet').hidden = true;
+      render(); return;
+    }
     case 'turn': {
       snap(); MP.deadline = e.deadline;
       if (s === 0) mpMyTurn(); else { phase = 'wait'; render(); mpClock(); }
@@ -305,7 +343,7 @@ async function mpEndHand(e, me) {
   } else await sleep(300);
   if (me !== run) return;
   await payoutAnim(H.result.pots);
-  G.stacks = rot(e.stacks); G.out = rot(e.out); G.place = rot(e.place);
+  G.stacks = rot(e.stacks); G.out = rot(e.out); G.place = rot(e.place); Object.assign(G, rebuyOf(e));
   for (const i of H.result.win) $('seat' + i).classList.add('win');
   for (let i = 0; i < G.n; i++) countStack(i);
   const heroWon = H.result.win.includes(0);
@@ -316,14 +354,15 @@ async function mpEndHand(e, me) {
     b ? handName(b[main.win[0]].score) : '모두 폴드'}${H.result.pots.length > 1 ? ` · 사이드팟 ${H.result.pots.length - 1}개` : ''}</span>`;
   H.result.pots.forEach((p, k) => log(`${k ? `사이드팟 ${k}` : '팟'} ${fmt(p.amt)} → ${p.win.map(who).join(' · ')}`, 'result'));
   H.busted = e.busted.map(L);
-  for (const i of H.busted) { const bd = $('badge' + i); bd.hidden = false; bd.textContent = `${G.place[i]}위`; $('seat' + i).classList.add('out'); log(`${who(i)} 탈락 · ${G.place[i]}위`, 'level'); }
+  for (const i of H.busted) { const bd = $('badge' + i), wait = G.pending?.[i]; bd.hidden = false; bd.textContent = wait ? '리바인?' : `${G.place[i]}위`; $('seat' + i).classList.add('out'); log(`${who(i)} 탈락 · ${wait ? '리바인 고민 중' : G.place[i] + '위'}`, 'level'); }
   const D = e.decisions[e.decisions.length - 1]; // EV 계기판: 이번 핸드 AI의 마지막 판단 (핸드가 끝난 뒤에만 온다)
   if (D) H.decision = { ...D, who: L(D.who) };
   H.committed = Array(G.n).fill(0); H.bets = Array(G.n).fill(0);
   render();
+  if (G.pending?.[0]) mpRebuyAsk();
 }
 function mpEnd(e) {
-  stopClock(); clearInterval(nextTimer); clearInterval(tourTimer); mpUnsub(); phase = 'over';
+  $('mpSheet').hidden = true; stopClock(); clearInterval(nextTimer); clearInterval(tourTimer); mpUnsub(); phase = 'over';
   const place = rot(e.place), styles = e.styles ? rot(e.styles) : [], mine = place[0];
   $('endTitle').textContent = mine === 1 ? '우승!' : mine ? `${mine}위` : '게임 종료';
   $('endSub').textContent = `친구와 치기 · ${G.hand}핸드${styles.some(Boolean) ? ' · AI 성향 공개' : ''}`;
@@ -334,4 +373,28 @@ function mpEnd(e) {
   sfx(mine === 1 ? 'win' : 'lose');
   if (mine === 1) chipRain();
   render();
+}
+
+// ===== 리바인 =====
+const rbText = n => n === -1 ? '무제한' : n ? `${n}번` : '없음';
+const rebuyOf = e => e.pending ? { pending: rot(e.pending), rebuyUntil: rot(e.rebuyUntil), rebuysLeft: rot(e.rebuysLeft) } : {};
+function mpRebuyAsk() {
+  sheet(`<h2>칩을 모두 잃었어요</h2><p>리바인하면 시작 칩(20,000)으로 다음 핸드부터 다시 참가해요</p>
+    <p>남은 리바인 <b>${rbText(G.rebuysLeft[0])}</b> · <b id="rbSec"></b>초 안에 골라 주세요</p>
+    <p class="mp-err" id="mpErr"></p>
+    <div class="row"><button class="btn primary" id="rbYes">리바인</button><button class="btn" id="rbNo">그만하기</button></div>`);
+  const tick = () => { const left = Math.ceil((G.rebuyUntil[0] - serverNow()) / 1000);
+    if (left <= 0 || !G.pending?.[0] || $('mpSheet').hidden) { clearInterval(MP.rbTimer); if (left <= 0) $('mpSheet').hidden = true; return; }
+    if ($('rbSec')) $('rbSec').textContent = left; };
+  clearInterval(MP.rbTimer); tick(); MP.rbTimer = setInterval(tick, 250);
+  const go = async yes => { $('rbYes').disabled = $('rbNo').disabled = true;
+    try { await mpCall('rebuy', { id: MP.id, yes }); $('mpSheet').hidden = true; mpPoll(); }
+    catch (e) { sheetErr(e.message); $('rbYes').disabled = $('rbNo').disabled = false; } };
+  $('rbYes').onclick = () => go(true); $('rbNo').onclick = () => go(false);
+}
+function mpGone() { // 방장이 방을 지웠다
+  stopClock(); clearInterval(nextTimer); clearInterval(tourTimer); clearInterval(MP.rbTimer); mpUnsub(); phase = 'over';
+  $('mpSheet').hidden = true;
+  $('endTitle').textContent = '방이 닫혔어요'; $('endSub').textContent = '방장이 방을 지웠어요'; $('standings').innerHTML = '';
+  $('bAgain').hidden = true; $('endModal').hidden = false;
 }
