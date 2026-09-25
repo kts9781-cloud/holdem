@@ -38,7 +38,7 @@ function mpNick(code) {
     <p class="mp-err" id="mpErr"></p>
     <div class="row"><button class="btn primary" id="mpNickOk">확인</button><button class="btn" onclick="mpClose()">취소</button></div>
     ${!loggedIn() && authOn?.length ? `<div class="acct"><span>이미 계정이 있나요?<small>다른 기기에서 쓰던 계정으로 들어가요</small></span>${loginButtons()}</div>` : ''}`);
-  const u = sessionUser(); if (loggedIn()) $('mpNick').value = String(u.user_metadata?.name || u.user_metadata?.full_name || '').slice(0, 12);
+  if (loggedIn()) $('mpNick').value = userName(sessionUser()).slice(0, 12);
   bindLogin($('mpBody'));
   const go = async () => {
     try { const r = await mpCall('profile', { nickname: $('mpNick').value }); if (loggedIn()) await mpImportLocal(); code ? mpJoin(code) : mpMenu(r.nickname); }

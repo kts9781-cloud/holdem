@@ -1165,6 +1165,9 @@ const esc = t => String(t).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;
 const AUTH_KEY = 'sb-kxhmazdqgcfbjadgcczf-auth-token', PROVIDERS = { kakao: '카카오', google: '구글' };
 const sessionUser = () => { try { return JSON.parse(localStorage.getItem(AUTH_KEY))?.user ?? null; } catch { return null; } };
 const loggedIn = () => MP_OK && !!sessionUser() && !sessionUser().is_anonymous;
+// 로그인 방식·이름: 손님 계정에 연결한 경우 이름은 identities 쪽에만 있다
+const userProvider = u => (u?.app_metadata?.providers ?? []).find(p => PROVIDERS[p]) ?? u?.app_metadata?.provider;
+const userName = u => u?.user_metadata?.name || u?.user_metadata?.full_name || u?.identities?.find(i => PROVIDERS[i.provider])?.identity_data?.name || '';
 let ACC = null, authOn = null, GREC = { hands: 0, handsWon: 0, bestPot: 0 }; // 계정 전적, 켜진 로그인 방식, 이번 게임의 핸드 기록
 const HU0 = { games: 0, won: 0, hands: 0, handsWon: 0, bestPot: 0 }, FT0 = { games: 0, wins: 0, best: 0, sum: 0 };
 const recHU = () => ACC ? { ...HU0, ...ACC.hu } : REC, recFT = n => ACC ? { ...FT0, ...ACC['ft' + n] } : RFT[n]; // 로그인하면 계정 전적
@@ -1177,8 +1180,8 @@ async function renderAccount() {
   }
   const u = sessionUser();
   if (loggedIn()) {
-    const name = u.user_metadata?.name || u.user_metadata?.full_name || '';
-    box.innerHTML = `<span>${PROVIDERS[u.app_metadata?.provider] ? PROVIDERS[u.app_metadata.provider] + '로' : '계정으로'} 로그인${name ? ' · ' + esc(name) : ''}<small>전적이 계정에 쌓여요</small></span><button class="linkbtn" id="bLogout">로그아웃</button><button class="linkbtn" id="bDelAcct">계정 삭제</button>`;
+    const name = userName(u), p = userProvider(u);
+    box.innerHTML = `<span>${PROVIDERS[p] ? PROVIDERS[p] + '로' : '계정으로'} 로그인${name ? ' · ' + esc(name) : ''}<small>전적이 계정에 쌓여요</small></span><button class="linkbtn" id="bLogout">로그아웃</button><button class="linkbtn" id="bDelAcct">계정 삭제</button>`;
     $('bLogout').onclick = () => loadMP().then(mpLogout);
     $('bDelAcct').onclick = () => { // 두 번 눌러야 지운다
       const b = $('bDelAcct');
