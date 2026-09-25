@@ -1,15 +1,12 @@
 // 친구와 같이 치기 (원격 드라이버). 판정은 서버(Supabase Edge Function `table`)가 하고,
 // 여기서는 이벤트를 순서대로 받아 기존 연출(딜·칩·쇼다운)로 재생한다. 남의 패는 쇼다운 전에 오지 않는다.
 // 내 좌석이 항상 아래(화면 0번)에 오도록 서버 좌석을 회전해서 보여 준다.
-const SUPA_URL = 'https://kxhmazdqgcfbjadgcczf.supabase.co';
-const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt4aG1hemRxZ2NmYmphZGdjY3pmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyMjAyODAsImV4cCI6MjEwNTc5NjI4MH0.H85z5TqLL8TKpQK9vpkrjYKWzy5gIbhslxPa9SeqaWA'; // 공개용 anon 키 (권한은 RLS로 막는다)
 let sb = null;
 const MP = { id: null, code: null, me: null, seat: 0, n: 0, users: [], host: null, lastSeq: 0, queue: [], pumping: false,
              skew: 0, deadline: null, nextHandAt: null, tickAt: 0, subs: [], watch: null, poll: null, waitCh: null };
 const L = s => (s - MP.seat + MP.n) % MP.n;                                  // 서버 좌석 → 화면 좌석
 const rot = a => a && Array.from({ length: MP.n }, (_, i) => a[(i + MP.seat) % MP.n]); // 서버 배열 → 화면 배열
 const serverNow = () => Date.now() + (MP.skew ?? 0);
-const esc = t => String(t).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
 
 async function mpClient() {
   if (sb) return sb;
@@ -39,9 +36,12 @@ function mpNick(code) {
   sheet(`<h2>닉네임</h2><p>친구들에게 보일 이름이에요 (12자까지)</p>
     <input class="mp-input" id="mpNick" maxlength="12" placeholder="예: 태성" autocomplete="nickname">
     <p class="mp-err" id="mpErr"></p>
-    <div class="row"><button class="btn primary" id="mpNickOk">확인</button><button class="btn" onclick="mpClose()">취소</button></div>`);
+    <div class="row"><button class="btn primary" id="mpNickOk">확인</button><button class="btn" onclick="mpClose()">취소</button></div>
+    ${!loggedIn() && authOn?.length ? `<div class="acct"><span>이미 계정이 있나요?<small>다른 기기에서 쓰던 계정으로 들어가요</small></span>${loginButtons()}</div>` : ''}`);
+  const u = sessionUser(); if (loggedIn()) $('mpNick').value = String(u.user_metadata?.name || u.user_metadata?.full_name || '').slice(0, 12);
+  bindLogin($('mpBody'));
   const go = async () => {
-    try { const r = await mpCall('profile', { nickname: $('mpNick').value }); code ? mpJoin(code) : mpMenu(r.nickname); }
+    try { const r = await mpCall('profile', { nickname: $('mpNick').value }); if (loggedIn()) await mpImportLocal(); code ? mpJoin(code) : mpMenu(r.nickname); }
     catch (e) { sheetErr(e.message); }
   };
   $('mpNickOk').onclick = go;
@@ -371,6 +371,7 @@ async function mpEndHand(e, me) {
   if (G.pending?.[0]) mpRebuyAsk();
 }
 function mpEnd(e) {
+  loadAccountRecords(); // 친구와 치기 결과는 서버가 계정 전적에 기록했다
   $('mpSheet').hidden = true; stopClock(); clearInterval(nextTimer); clearInterval(tourTimer); mpUnsub(); phase = 'over';
   const place = rot(e.place), styles = e.styles ? rot(e.styles) : [], mine = place[0];
   const away = e.reason === 'away'; // 남은 사람이 모두 자리를 비워 칩 순서로 끝냄
@@ -416,3 +417,45 @@ $('bDelRoom').onclick = () => {
   clearTimeout(delArm); delArm = null; b.textContent = '방 삭제'; b.classList.remove('warn');
   mpCall('remove', { id: MP.id }).then(() => mpGone('방을 지웠어요'), e => log(e.message, 'level'));
 };
+
+// ===== 로그인 (카카오·구글) =====
+// 손님이면 지금 계정에 카카오·구글을 연결 → 같은 계정이 정식 계정이 된다 (닉네임·AI 기억·내 방 유지)
+const authRedirect = p => `${location.origin}${location.pathname}?login=${p}`;
+async function mpLogin(provider) {
+  await mpClient();
+  const { data: { user } } = await sb.auth.getUser(), options = { redirectTo: authRedirect(provider) };
+  const { error } = user?.is_anonymous ? await sb.auth.linkIdentity({ provider, options }) : await sb.auth.signInWithOAuth({ provider, options });
+  if (error) throw error; // 성공하면 카카오·구글 화면으로 넘어간다
+}
+// 카카오·구글에서 돌아왔을 때
+async function mpAuthReturn(provider) {
+  const q = new URLSearchParams(location.search + '&' + location.hash.slice(1)), code = q.get('error_code'), err = q.get('error_description');
+  await mpClient(); // 주소에 담겨 온 로그인 정보를 읽는다
+  history.replaceState(null, '', location.pathname);
+  if (code === 'identity_already_exists' || /already/i.test(err || '')) // 다른 기기에서 이미 만든 계정 → 그 계정으로 (이 기기 손님은 두고 간다)
+    return sb.auth.signInWithOAuth({ provider, options: { redirectTo: authRedirect(provider) } });
+  if (code || err) { log('로그인하지 못했어요: ' + (err || code), 'level'); return renderAccount(); }
+  MP.me = (await sb.auth.getUser()).data.user.id;
+  renderAccount();
+  const { data: prof } = await sb.from('profiles').select('nickname').eq('id', MP.me).maybeSingle();
+  if (!prof) return mpNick(); // 새 계정: 닉네임부터 (정하면 이 기기 전적을 합친다)
+  await mpImportLocal();
+  log(`${PROVIDERS[provider] ?? ''} 로그인 · 전적이 계정에 쌓여요`, 'level');
+}
+async function mpDeleteAccount() { // 서버에서 계정을 지우고 이 기기에서도 로그아웃
+  await mpClient(); await mpCall('deleteAccount');
+  await sb.auth.signOut({ scope: 'local' }).catch(() => {});
+  sb = null; MP.me = null; ACC = null;
+  renderAccount(); renderRecord(); renderLobbyRecords(); log('계정과 전적을 지웠어요', 'level');
+}
+async function mpLogout() {
+  await mpClient(); await sb.auth.signOut();
+  sb = null; MP.me = null; ACC = null; // 다음에 친구와 치기를 열면 새 손님으로 시작
+  renderAccount(); renderRecord(); renderLobbyRecords();
+}
+// 이 기기 전적을 계정에 한 번 합친다 (기기마다 한 번, 서버가 확인)
+async function mpImportLocal() {
+  let device = store.get('holdem.device', '');
+  if (!device) { device = crypto.randomUUID(); store.set('holdem.device', device); }
+  try { const r = await mpCall('importLocal', { device, hu: REC, ft6: RFT[6], ft9: RFT[9] }); ACC = r.records; renderRecord(); renderLobbyRecords(); } catch {}
+}

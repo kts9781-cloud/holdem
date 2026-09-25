@@ -275,6 +275,10 @@ button:disabled{cursor:not-allowed}
 .mode b{font-size:17px}
 .mode span{font-size:13px; color:var(--muted)}
 .mode em{font:normal 12px var(--mono); color:var(--brass)}
+.acct{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:14px; padding-top:12px; border-top:1px solid rgba(205,166,94,.14); font-size:13px}
+.acct > span{flex:1 1 180px; color:var(--text)} .acct small{display:block; font-size:12px; color:var(--muted)}
+.acct .btn{min-height:44px; padding:0 14px; font-size:14px} .acct .login-kakao{background:#fee500; color:#191600; border-color:transparent}
+.acct .linkbtn{font-size:12px}
 .standings{list-style:none; margin:0 0 18px; padding:0; display:grid; gap:4px; font-size:14px}
 .standings li{display:flex; justify-content:space-between; gap:10px; padding:6px 10px; border-radius:8px; background:rgba(255,255,255,.03)}
 .standings li.me{background:rgba(205,166,94,.14); color:var(--text); font-weight:600}
@@ -392,7 +396,8 @@ button:disabled{cursor:not-allowed}
       <button class="mode" data-mode="ft6"><b>파이널 테이블 6인</b><span>무작위 페르소나 AI 5명 · 토너먼트</span><em id="lr-ft6"></em></button>
       <button class="mode" data-mode="ft9"><b>파이널 테이블 9인</b><span>무작위 페르소나 AI 8명 · 토너먼트</span><em id="lr-ft9"></em></button>
     </div>
-    <button class="mode" id="mpBtn" hidden style="margin-top:10px; width:100%"><b>친구와 치기</b><span>방을 만들고 링크로 친구를 불러요 · 빈자리는 AI</span></button>
+    <button class="mode" id="mpBtn" hidden style="margin-top:10px; width:100%"><b>친구와 치기</b><span>방을 만들고 링크로 친구를 불러요 · 빈자리는 AI</span><em id="lr-mp"></em></button>
+    <div class="acct" id="acct" hidden></div>
     <button class="btn wide install" hidden style="margin-top:14px">앱으로 설치하기</button>
   </div>
 </div>
@@ -955,7 +960,7 @@ async function onHandEnd(me) {
     log(`${who(i)} 탈락 · ${G.place[i]}위`, 'level');
   }
   if (H.hole[0].length) { G.stats[0].hands++; store.set(PROFILE_KEY, G.stats[0]); renderProfile(); }
-  if (G.n === 2) { REC.hands++; if (heroWon && !tie) { REC.handsWon++; REC.bestPot = Math.max(REC.bestPot, R.pot); } store.set('holdem.record', REC); }
+  if (G.n === 2) { REC.hands++; GREC.hands++; if (heroWon && !tie) { REC.handsWon++; REC.bestPot = Math.max(REC.bestPot, R.pot); GREC.handsWon++; GREC.bestPot = Math.max(GREC.bestPot, R.pot); } store.set('holdem.record', REC); }
   render();
   if (G.out[0] || alive().length === 1) { await sleep(1400); if (me === run) endTournament(!G.out[0]); return; }
   autoNext(H.folded[0] ? 2 : 4);
@@ -999,7 +1004,7 @@ async function startHand(fresh = false) {
 // ===== 로비·결과 =====
 function start(m) {
   run++; stopClock(); clearInterval(nextTimer);
-  mode = m;
+  mode = m; GREC = { hands: 0, handsWon: 0, bestPot: 0 };
   const n = m === 'hu' ? 2 : m === 'ft6' ? 6 : 9;
   if (n === 2) { newGame({ names: ['나', '컴퓨터'], styles: [null, 'pro'], stacks: [20000, 20000] }); bios = ['', '']; }
   else {
@@ -1026,6 +1031,7 @@ function endTournament(won) {
   const place = won ? 1 : G.place[0], n = G.n;
   if (n === 2) { REC.games++; if (won) REC.won++; store.set('holdem.record', REC); }
   else { const r = RFT[n]; r.games++; if (won) r.wins++; r.best = r.best ? Math.min(r.best, place) : place; r.sum += place; store.set('holdem.record.ft', RFT); }
+  if (loggedIn()) postRecord(n === 2 ? { kind: 'hu', won: won ? 1 : 0, ...GREC } : { kind: 'ft' + n, place }); // 계정에도
   renderRecord();
   $('endTitle').textContent = won ? (n === 2 ? '완승!' : '우승!') : n === 2 ? '패배' : `${place}위로 탈락`;
   $('endSub').textContent = won ? `${n === 2 ? '컴퓨터의 칩을 모두 땄어요' : `${n}명 중 마지막까지 살아남았어요`} · ${G.hand}핸드` : `${G.hand}핸드 · 레벨 ${G.level + 1}`;
@@ -1050,16 +1056,22 @@ function showLobby() {
   if (mode === 'mp') mpLeave();
   run++; stopClock(); clearInterval(nextTimer); clearInterval(tourTimer); phase = 'lobby';
   $('endModal').hidden = true; $('lobby').hidden = false;
-  $('lr-hu').textContent = REC.games ? `${REC.won}승 ${REC.games - REC.won}패` : '';
-  for (const n of [6, 9]) { const r = RFT[n]; $('lr-ft' + n).textContent = r.games ? `${r.games}판 · 우승 ${r.wins}회 · 최고 ${r.best}위` : ''; }
+  renderLobbyRecords();
+}
+function renderLobbyRecords() {
+  const h = recHU(), m = ACC?.mp;
+  $('lr-hu').textContent = h.games ? `${h.won}승 ${h.games - h.won}패` : '';
+  for (const n of [6, 9]) { const r = recFT(n); $('lr-ft' + n).textContent = r.games ? `${r.games}판 · 우승 ${r.wins}회 · 최고 ${r.best}위` : ''; }
+  $('lr-mp').textContent = m?.games ? `${m.games}판 · 우승 ${m.wins}회 · 평균 ${(m.sum / m.games).toFixed(1)}위` : '';
 }
 function renderRecord() {
   if (!G || G.n === 2) {
-    $('rL1').textContent = '게임'; $('r1').textContent = `${REC.won}승 ${REC.games - REC.won}패`;
-    $('rL2').textContent = '핸드 승률'; $('r2').innerHTML = REC.hands ? `${Math.round(REC.handsWon / REC.hands * 100)}%<small>${REC.handsWon}/${REC.hands}</small>` : '—';
-    $('rL3').textContent = '최대로 딴 팟'; $('r3').textContent = REC.bestPot ? fmt(REC.bestPot) : '—';
+    const h = recHU();
+    $('rL1').textContent = '게임'; $('r1').textContent = `${h.won}승 ${h.games - h.won}패`;
+    $('rL2').textContent = '핸드 승률'; $('r2').innerHTML = h.hands ? `${Math.round(h.handsWon / h.hands * 100)}%<small>${h.handsWon}/${h.hands}</small>` : '—';
+    $('rL3').textContent = '최대로 딴 팟'; $('r3').textContent = h.bestPot ? fmt(h.bestPot) : '—';
   } else {
-    const r = RFT[G.n];
+    const r = recFT(G.n);
     $('rL1').textContent = `${G.n}인 토너먼트`; $('r1').innerHTML = `${r.games}판<small>우승 ${r.wins}</small>`;
     $('rL2').textContent = '최고 순위'; $('r2').textContent = r.best ? `${r.best}위` : '—';
     $('rL3').textContent = '평균 순위'; $('r3').textContent = r.games ? `${(r.sum / r.games).toFixed(1)}위` : '—';
@@ -1146,6 +1158,50 @@ addEventListener('appinstalled', () => { showInstall(false); log('앱으로 설�
 
 // ===== 친구와 치기: 필요할 때만 Supabase 라이브러리와 mp.js를 불러온다 (claude.ai 안에서는 외부 접속이 막혀 숨긴다) =====
 const MP_OK = !/claude/.test(location.hostname) && location.protocol !== 'file:';
+const SUPA_URL = 'https://kxhmazdqgcfbjadgcczf.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt4aG1hemRxZ2NmYmphZGdjY3pmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyMjAyODAsImV4cCI6MjEwNTc5NjI4MH0.H85z5TqLL8TKpQK9vpkrjYKWzy5gIbhslxPa9SeqaWA'; // 공개용 anon 키 (권한은 RLS로 막는다)
+const esc = t => String(t).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+// ===== 계정: 손님은 그대로, 카카오·구글로 로그인하면 전적이 계정에 쌓이고 어느 기기에서나 이어진다 =====
+const AUTH_KEY = 'sb-kxhmazdqgcfbjadgcczf-auth-token', PROVIDERS = { kakao: '카카오', google: '구글' };
+const sessionUser = () => { try { return JSON.parse(localStorage.getItem(AUTH_KEY))?.user ?? null; } catch { return null; } };
+const loggedIn = () => MP_OK && !!sessionUser() && !sessionUser().is_anonymous;
+let ACC = null, authOn = null, GREC = { hands: 0, handsWon: 0, bestPot: 0 }; // 계정 전적, 켜진 로그인 방식, 이번 게임의 핸드 기록
+const HU0 = { games: 0, won: 0, hands: 0, handsWon: 0, bestPot: 0 }, FT0 = { games: 0, wins: 0, best: 0, sum: 0 };
+const recHU = () => ACC ? { ...HU0, ...ACC.hu } : REC, recFT = n => ACC ? { ...FT0, ...ACC['ft' + n] } : RFT[n]; // 로그인하면 계정 전적
+async function renderAccount() {
+  const box = $('acct');
+  if (!MP_OK) return;
+  if (authOn === null) { // Supabase에서 켜 둔 로그인 방식만 버튼으로
+    try { const s = await (await fetch(SUPA_URL + '/auth/v1/settings', { headers: { apikey: SUPA_KEY } })).json(); authOn = Object.keys(PROVIDERS).filter(p => s.external?.[p]); }
+    catch { authOn = []; }
+  }
+  const u = sessionUser();
+  if (loggedIn()) {
+    const name = u.user_metadata?.name || u.user_metadata?.full_name || '';
+    box.innerHTML = `<span>${PROVIDERS[u.app_metadata?.provider] ? PROVIDERS[u.app_metadata.provider] + '로' : '계정으로'} 로그인${name ? ' · ' + esc(name) : ''}<small>전적이 계정에 쌓여요</small></span><button class="linkbtn" id="bLogout">로그아웃</button><button class="linkbtn" id="bDelAcct">계정 삭제</button>`;
+    $('bLogout').onclick = () => loadMP().then(mpLogout);
+    $('bDelAcct').onclick = () => { // 두 번 눌러야 지운다
+      const b = $('bDelAcct');
+      if (!b.classList.contains('warn')) { b.textContent = '한 번 더 누르면 계정과 전적이 지워져요'; b.classList.add('warn'); setTimeout(() => { b.textContent = '계정 삭제'; b.classList.remove('warn'); }, 4000); return; }
+      b.disabled = true; loadMP().then(mpDeleteAccount).catch(e => { b.disabled = false; log(e.message, 'level'); });
+    };
+  } else if (authOn.length) {
+    box.innerHTML = `<span>손님으로 하는 중<small>로그인하면 전적이 어느 기기에서나 이어져요</small></span>${loginButtons()}`;
+    bindLogin(box);
+  } else { box.hidden = true; return; }
+  box.insertAdjacentHTML('beforeend', '<a class="linkbtn" href="privacy.html" target="_blank" rel="noopener">개인정보처리방침</a>');
+  box.hidden = false;
+}
+const loginButtons = () => (authOn ?? []).map(p => `<button class="btn login-${p}" data-login="${p}">${PROVIDERS[p]}로 로그인</button>`).join('');
+const bindLogin = el => el.querySelectorAll('[data-login]').forEach(b => b.onclick = () => {
+  b.disabled = true; loadMP().then(() => mpLogin(b.dataset.login)).catch(e => { b.disabled = false; log(e.message, 'level'); });
+});
+async function loadAccountRecords() { // 로그인했으면 계정 전적을 불러와 보여 준다
+  if (!loggedIn()) { ACC = null; return; }
+  try { await loadMP(); await mpClient(); const { data } = await sb.from('profiles').select('records').eq('id', MP.me).maybeSingle(); ACC = data?.records ?? {}; } catch {}
+  renderRecord(); renderLobbyRecords();
+}
+const postRecord = body => loadMP().then(mpClient).then(() => mpCall('record', body)).then(r => { ACC = r.records; renderRecord(); renderLobbyRecords(); }).catch(() => {}); // 실패해도 기기 전적은 남는다
 const loadScript = src => new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => no(new Error('불러오지 못했어요: ' + src)); document.head.append(s); });
 async function loadMP() {
   if (!window.supabase) await loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.min.js');
@@ -1156,7 +1212,9 @@ $('mpBtn').onclick = () => loadMP().then(() => mpOpen()).catch(e => log(e.messag
 $('bBack').onclick = () => mpBack();
 
 renderSound(); renderRecord(); renderProfile(); showLobby();
+renderAccount(); loadAccountRecords();
 if (MP_OK && Q.has('room')) loadMP().then(() => mpOpen(Q.get('room'))).catch(() => {}); // 초대 링크로 들어오면 바로 참가
+if (MP_OK && Q.has('login')) loadMP().then(() => mpAuthReturn(Q.get('login'))).catch(e => log(e.message, 'level')); // 카카오·구글에서 돌아옴
 if (Q.has('mode')) start(Q.get('mode')); // 확인용: ?mode=ft6 로 바로 시작
 if (Q.has('test')) {
   const t = selfTest();
