@@ -29,6 +29,7 @@
   const NEW = 'https://holdem.io.kr/', KEEP = k => /^holdem\./.test(k) || k === 'sb-kxhmazdqgcfbjadgcczf-auth-token';
   const data = {};
   try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (KEEP(k)) data[k] = localStorage.getItem(k); } } catch {}
+  try { if (!localStorage.getItem('holdem.movedId')) localStorage.setItem('holdem.movedId', crypto.randomUUID()); data['holdem.movedId'] = localStorage.getItem('holdem.movedId'); } catch {} // 같은 짐은 한 번만 더하게
   try { for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister(); } catch {}
   try { for (const k of await caches.keys()) await caches.delete(k); } catch {}
   const pack = Object.keys(data).length
