@@ -365,8 +365,9 @@ async function mpEndHand(e, me) {
 function mpEnd(e) {
   $('mpSheet').hidden = true; stopClock(); clearInterval(nextTimer); clearInterval(tourTimer); mpUnsub(); phase = 'over';
   const place = rot(e.place), styles = e.styles ? rot(e.styles) : [], mine = place[0];
-  $('endTitle').textContent = mine === 1 ? '우승!' : mine ? `${mine}위` : '게임 종료';
-  $('endSub').textContent = `친구와 치기 · ${G.hand}핸드${styles.some(Boolean) ? ' · AI 성향 공개' : ''}`;
+  const away = e.reason === 'away'; // 남은 사람이 모두 자리를 비워 칩 순서로 끝냄
+  $('endTitle').textContent = mine === 1 && !away ? '우승!' : mine ? `${mine}위` : '게임 종료';
+  $('endSub').textContent = `친구와 치기 · ${G.hand}핸드${away ? ' · 모두 자리를 비워 칩 순서로 끝냈어요' : ''}${styles.some(Boolean) ? ' · AI 성향 공개' : ''}`;
   const rows = G.names.map((nm, i) => ({ i, nm, place: place[i] })).filter(r => r.nm).sort((a, b) => (a.place ?? 0) - (b.place ?? 0));
   $('standings').innerHTML = rows.map(r => `<li class="${r.i ? '' : 'me'}"><span>${r.place ? r.place + '위' : '진행 중'}</span><span>${esc(r.nm)}${styles[r.i] ? ` · AI ${styles[r.i]}` : ''}</span><span>${r.place ? '' : fmt(G.stacks[r.i]) + '칩'}</span></li>`).join('');
   $('bAgain').hidden = true;
