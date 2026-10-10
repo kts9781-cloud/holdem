@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <title>계정 연결 · 움직이는 요새</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; min-height: 100svh; padding: max(32px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); display: grid; place-items: center; color: #f3edda; background: radial-gradient(ellipse at 50% 12%, #35483d, #171f1c 68%); }
+    main { width: 100%; max-width: 440px; }
+    .brand { color: #c8c8af; letter-spacing: .13em; font-size: 15px; font-weight: 700; margin: 0 0 32px; }
+    .seal { width: 72px; height: 72px; display: grid; place-items: center; border-radius: 24px; background: #b5cc91; color: #243629; box-shadow: 0 6px 0 #0e1613; margin-bottom: 28px; }
+    .seal svg { width: 40px; height: 40px; }
+    h1 { font-size: clamp(28px, 7vw, 36px); line-height: 1.3; letter-spacing: -.045em; margin: 0 0 16px; }
+    .description { font-size: 19px; line-height: 1.65; margin: 0; color: #d0d4c6; word-break: keep-all; }
+    .steps { margin: 30px 0; padding: 20px; background: #ffffff07; border: 1px solid #566052; border-radius: 18px; list-style: none; font-size: 17px; }
+    .steps li { display: flex; gap: 12px; align-items: center; line-height: 1.5; }
+    .steps li + li { margin-top: 16px; }
+    .step { border: 1px solid #8e9c7d; border-radius: 50%; width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center; font-size: 14px; }
+    .done { background: #b5cc91; color: #243629; border-color: transparent; }
+    #return { width: 100%; min-height: 64px; display: flex; align-items: center; justify-content: center; padding: 17px 20px; background: #ead5a7; color: #25291f; border: 0; border-radius: 14px; font-size: 20px; font-weight: 800; text-decoration: none; box-shadow: 0 5px 0 #8e7950; text-align: center; }
+    #return:active { transform: translateY(3px); box-shadow: 0 2px 0 #8e7950; }
+    #return:focus-visible { outline: 3px solid #fff; outline-offset: 5px; }
+    #help { color: #bbc2b3; font-size: 16px; line-height: 1.65; margin: 24px 4px 0; word-break: keep-all; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+<main>
+  <p class="brand">움직이는 요새 · 계정 연결</p>
+  <div class="seal" aria-hidden="true"><svg viewBox="0 0 40 40" fill="none"><path d="M8 21L16 29L32 11" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  <h1 id="title">게임에서 이어서 진행하세요</h1>
+  <p class="description" id="description">움직이는 요새로 돌아가 계정 연결 상태를 확인해 주세요.</p>
+  <ol class="steps" id="steps" hidden>
+    <li><span class="step done" aria-hidden="true">✓</span>로그인 인증 완료</li>
+    <li><span class="step" aria-hidden="true">2</span>게임에서 연결 · 저장 확인</li>
+  </ol>
+  <a id="return" href="fortress://account/return">게임으로 돌아가기 ↗</a>
+  <p id="help" role="status">버튼이 열리지 않으면 최근 앱 목록에서 ‘움직이는 요새’를 선택해 주세요. 게임으로 돌아가면 이어서 처리됩니다.</p>
+  <noscript><p>최근 앱 목록에서 움직이는 요새를 열어 주세요.</p></noscript>
+</main>
+<script>
+  // This public page receives only a display status. No OAuth codes, tokens or flow secrets.
+  const status = new URLSearchParams(location.search).get('status');
+  const title = document.getElementById('title');
+  const description = document.getElementById('description');
+  const help = document.getElementById('help');
+  const button = document.getElementById('return');
+  if (status === 'success') {
+    title.textContent = '인증이 완료됐어요';
+    description.textContent = '이제 게임으로 돌아가면 계정 연결과 저장 확인이 이어집니다.';
+    document.getElementById('steps').hidden = false;
+  } else if (status === 'error' || status === 'expired') {
+    title.textContent = status === 'expired' ? '다시 연결해 주세요' : '로그인을 완료하지 못했어요';
+    description.textContent = status === 'expired' ? '요청 시간이 지났거나 이미 처리된 연결입니다. 게임 설정에서 연결 상태를 확인해 주세요.' : '로그인이 취소되었거나 연결을 처리하지 못했습니다. 게임 설정에서 다시 시도해 주세요.';
+    document.querySelector('.seal').hidden = true;
+  }
+  if (/Android/i.test(navigator.userAgent)) {
+    const fallback = new URL(location.pathname, location.origin);
+    fallback.searchParams.set('status', ['success', 'error', 'expired'].includes(status) ? status : 'return');
+    fallback.searchParams.set('manual', '1');
+    button.href = 'intent://account/return#Intent;scheme=fortress;package=com.kimtaesung1.fortress;S.browser_fallback_url=' + encodeURIComponent(fallback.href) + ';end';
+  } else {
+    button.removeAttribute('href');
+    button.textContent = '움직이는 요새 앱을 열어 주세요';
+  }
+  if (new URLSearchParams(location.search).has('manual')) {
+    help.textContent = '최근 앱 목록에서 ‘움직이는 요새’를 직접 열어 주세요. 새로 로그인할 필요 없이 이어서 처리됩니다.';
+  }
+</script>
+</body>
+</html>
