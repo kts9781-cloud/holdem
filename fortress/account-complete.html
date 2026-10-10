@@ -53,14 +53,22 @@
     title.textContent = '인증이 완료됐어요';
     description.textContent = '이제 게임으로 돌아가면 계정 연결과 저장 확인이 이어집니다.';
     document.getElementById('steps').hidden = false;
+  } else if (status === 'linked_elsewhere') {
+    title.textContent = '이미 연결된 계정이에요';
+    description.textContent = '이 계정은 이미 다른 사용자에 연결되어 있어 추가 연결할 수 없습니다. 게임 설정의 ‘기존 계정으로 로그인’을 선택해 주세요. 현재 진행과 기존 연결은 유지됩니다.';
+    document.querySelector('.seal').hidden = true;
+  } else if (status === 'cancelled') {
+    title.textContent = '로그인을 취소했어요';
+    description.textContent = '현재 계정 연결과 게임 진행은 그대로 유지됩니다. 게임으로 돌아가 계속 플레이할 수 있습니다.';
+    document.querySelector('.seal').hidden = true;
   } else if (status === 'error' || status === 'expired') {
     title.textContent = status === 'expired' ? '다시 연결해 주세요' : '로그인을 완료하지 못했어요';
-    description.textContent = status === 'expired' ? '요청 시간이 지났거나 이미 처리된 연결입니다. 게임 설정에서 연결 상태를 확인해 주세요.' : '로그인이 취소되었거나 연결을 처리하지 못했습니다. 게임 설정에서 다시 시도해 주세요.';
+    description.textContent = status === 'expired' ? '요청 시간이 지났거나 이미 처리된 연결입니다. 게임 설정에서 연결 상태를 확인해 주세요.' : '추가 연결을 완료하지 못했습니다. 이미 사용하는 계정이라면 게임 설정의 ‘기존 계정으로 로그인’을 선택해 주세요. 현재 진행과 기존 연결은 유지됩니다.';
     document.querySelector('.seal').hidden = true;
   }
   if (/Android/i.test(navigator.userAgent)) {
     const fallback = new URL(location.pathname, location.origin);
-    fallback.searchParams.set('status', ['success', 'error', 'expired'].includes(status) ? status : 'return');
+    fallback.searchParams.set('status', ['success', 'error', 'expired', 'linked_elsewhere', 'cancelled'].includes(status) ? status : 'return');
     fallback.searchParams.set('manual', '1');
     button.href = 'intent://account/return#Intent;scheme=fortress;package=com.kimtaesung1.fortress;S.browser_fallback_url=' + encodeURIComponent(fallback.href) + ';end';
   } else {
